@@ -1,0 +1,282 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500/60 ring-offset-2 ring-offset-white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-card;
+  }
+
+  .card-pad {
+    @apply p-5 sm:p-6;
+  }
+
+  .page-title {
+    @apply text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm text-slate-500;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800
+           placeholder:text-slate-400 transition
+           hover:border-slate-400
+           focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20;
+  }
+
+  .input:disabled,
+  .input[readonly] {
+    @apply cursor-not-allowed border-slate-200 bg-slate-50 text-slate-500;
+  }
+
+  .input-error {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           transition-all duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60
+           disabled:active:scale-100;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-600 text-white shadow-sm hover:bg-primary-700;
+  }
+
+  .btn-secondary {
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-800;
+  }
+
+  .btn-success {
+    @apply btn bg-school-600 text-white shadow-sm hover:bg-school-700;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700;
+  }
+
+  .btn-sm {
+    @apply px-3 py-2 text-xs;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  .table-head {
+    @apply whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .table-cell {
+    @apply whitespace-nowrap px-4 py-3.5 text-sm text-slate-700;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-slate-200/70;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/60 to-transparent;
+  }
+
+  .section-title {
+    @apply text-sm font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .stat-chip {
+    @apply inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Tema gelap untuk Admin Panel                                        */
+  /* ------------------------------------------------------------------ */
+  .admin-shell {
+    @apply relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950 shadow-dropdown;
+  }
+
+  .admin-shell::before {
+    content: '';
+    @apply pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary-600/20 blur-3xl;
+  }
+
+  .admin-shell::after {
+    content: '';
+    @apply pointer-events-none absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-school-500/15 blur-3xl;
+  }
+
+  .dark-card {
+    @apply rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-sm;
+  }
+
+  .dark-label {
+    @apply mb-1.5 block text-sm font-medium text-slate-300;
+  }
+
+  .dark-input {
+    @apply w-full rounded-xl border border-white/10 bg-slate-900/70 px-3.5 py-2.5 text-sm text-slate-100
+           placeholder:text-slate-500 transition
+           hover:border-white/20
+           focus:border-primary-400 focus:ring-2 focus:ring-primary-500/30;
+  }
+
+  .dark-input:disabled,
+  .dark-input[readonly] {
+    @apply cursor-not-allowed border-white/5 bg-slate-900/40 text-slate-500;
+  }
+
+  .dark-table-head {
+    @apply whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400;
+  }
+
+  .dark-table-cell {
+    @apply whitespace-nowrap px-4 py-3.5 text-sm text-slate-300;
+  }
+
+  .dark-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold
+           transition-all duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .dark-btn-primary {
+    @apply dark-btn bg-primary-600 text-white hover:bg-primary-500;
+  }
+
+  .dark-btn-ghost {
+    @apply dark-btn border border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/10;
+  }
+
+  .dark-btn-danger {
+    @apply dark-btn bg-red-600/90 text-white hover:bg-red-500;
+  }
+
+  .dark-btn-sm {
+    @apply px-3 py-2 text-xs;
+  }
+
+  .dark-chip {
+    @apply inline-flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-slate-300;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* SweetAlert2 — selaras dengan design system */
+.swal2-popup {
+  border-radius: 1rem !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+.swal2-title {
+  font-size: 1.125rem !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
+}
+.swal2-html-container {
+  font-size: 0.875rem !important;
+  color: #475569 !important;
+}
+.swal2-styled {
+  border-radius: 0.75rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+/* Toast ringkas & profesional (menggantikan toast bawaan yang besar) */
+.app-toast {
+  position: relative !important;
+  overflow: hidden !important;
+  min-width: 260px !important;
+  max-width: 380px !important;
+  padding: 0.75rem 1rem 0.75rem 1.125rem !important;
+  border: 1px solid #e2e8f0 !important;
+  border-left: 3px solid var(--toast-accent, #2563eb) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 12px 32px -14px rgb(15 23 42 / 0.3) !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+.app-toast .swal2-title {
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
+  line-height: 1.45 !important;
+  text-align: left !important;
+  color: #1e293b !important;
+}
+.app-toast .swal2-html-container {
+  padding: 0 !important;
+  margin: 0.125rem 0 0 !important;
+  font-size: 0.75rem !important;
+  line-height: 1.5 !important;
+  text-align: left !important;
+  color: #64748b !important;
+}
+.app-toast .swal2-timer-progress-bar {
+  height: 2px !important;
+  background: var(--toast-accent, #2563eb) !important;
+  opacity: 0.7 !important;
+}
+.app-toast--success {
+  --toast-accent: #16a34a;
+}
+.app-toast--error {
+  --toast-accent: #dc2626;
+}
+.app-toast--warning {
+  --toast-accent: #d97706;
+}
+.app-toast--info {
+  --toast-accent: #2563eb;
+}

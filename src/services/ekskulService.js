@@ -1,0 +1,411 @@
+/**
+ * Service Ekskul.
+ *
+ * Satu siswa dapat mengikuti lebih dari satu ekskul. Setiap pendaftaran
+ * (`student_ekskul`) memiliki biaya bulanan sendiri, dan pembayarannya
+ * dicatat per periode bulan pada tabel `ekskul_payments`.
+ *
+ * Berbeda dengan SPP, ekskul TIDAK punya total tagihan tahunan
+ * (tidak dikalikan 12 bulan) — hanya tagihan bulanan per ekskul.
+ */
+import { getDB, commit } from '../lib/db';
+import { uid, normalizeText } from '../utils/helpers';
+import {
+  MONTHS,
+  getAcademicYearFromNoInduk,
+  getAcademicYearLabelFromNoInduk,
+} from '../utils/paymentCalculator';
+
+/** Daftar ekskul yang tersedia beserta biaya bulanannya. */
+export const EKSKUL_OPTIONS = [
+  { nama: 'Karate', biaya: 20000 },
+  { nama: 'Badminton', biaya: 20000 },
+  { nama: 'Futsal', biaya: 20000 },
+  { nama: 'Tari', biaya: 20000 },
+  { nama: 'English Club', biaya: 20000 },
+  { nama: 'Arabic Club', biaya: 20000 },
+  { nama: 'Japanese Club', biaya: 20000 },
+  { nama: 'Qasidah', biaya: 25000 },
+  { nama: 'Drumband', biaya: 25000 },
+  { nama: 'Hadroh', biaya: 25000 },
+  { nama: 'Marawis', biaya: 25000 },
+  { nama: 'Cergam', biaya: 20000 },
+  { nama: 'Kaligrafi', biaya: 20000 },
+];
+
+export const DEFAULT_EKSKUL_FEE = 20000;
+
+/** Cari biaya bulanan berdasarkan nama ekskul (case-insensitive). */
+export function getEkskulFee(nama) {
+  const key = normalizeText(nama);
+  const found = EKSKUL_OPTIONS.find((item) => normalizeText(item.nama) === key);
+  return found?.biaya ?? DEFAULT_EKSKUL_FEE;
+}
+
+const nowISO = () => new Date().toISOString();
+
+/* ------------------------------------------------------------------ */
+/* Query                                                               */
+/* ------------------------------------------------------------------ */
+function enrollmentsOf(studentId) {
+  const db = getDB();
+  return (db.student_ekskul || []).filter(
+    (row) => row.student_id === studentId && row.status !== 'nonaktif',
+  );
+}
+
+function paymentsOf(enrollmentId) {
+  return (getDB().ekskul_payments || []).filter(
+    (row) => row.student_ekskul_id === enrollmentId,
+  );
+}
+
+function summarizeEnrollment(enrollment) {
+  const payments = paymentsOf(enrollment.id).sort((a, b) => {
+    const diff = MONTHS.indexOf(a.bulan) - MONTHS.indexOf(b.bulan);
+    if (diff !== 0) return diff;
+    return String(a.created_at).localeCompare(String(b.created_at));
+  });
+  const totalPaid = payments.reduce((sum, p) => sum + (Number(p.nominal_bayar) || 0), 0);
+  const monthlyFee = Number(enrollment.biaya_bulanan) || getEkskulFee(enrollment.ekskul_nama);
+  const paidMonths = [...new Set(payments.map((p) => p.bulan).filter(Boolean))];
+
+  return {
+    ...enrollment,
+    monthlyFee,
+    payments,
+    totalPaid,
+    paidMonths,
+    transactionCount: payments.length,
+  };
+}
+
+/** Baris tabel Ekskul: siswa + daftar ekskul yang diikuti. */
+export function listEkskulRows({
+  search = '',
+  kelas = '',
+  tahunAjaran = '',
+  page = 1,
+  pageSize = 10,
+  order = { field: 'nama_lengkap', direction: 'asc' },
+} = {}) {
+  const db = getDB();
+  const students = db.students || [];
+  const keyword = normalizeText(search);
+  const digits = String(search || '').replace(/\D/g, '');
+
+  let rows = students.map((student) => {
+    const enrollments = enrollmentsOf(student.id).map(summarizeEnrollment);
+    return {
+      id: student.id,
+      student_id: student.id,
+      no_induk: student.no_induk,
+      nisn: student.nisn,
+      nama_lengkap: student.nama_lengkap,
+      kelas: student.kelas,
+      rombel: student.rombel,
+      tahun_ajaran: getAcademicYearFromNoInduk(student.no_induk)?.label ?? null,
+      tahun_ajaran_prefix: getAcademicYearFromNoInduk(student.no_induk)?.prefix ?? null,
+      ekskul: enrollments,
+      ekskul_names: enrollments.map((item) => item.ekskul_nama),
+      ekskul_fee: enrollments.reduce((sum, item) => sum + item.monthlyFee, 0),
+      ekskul_paid: enrollments.reduce((sum, item) => sum + item.totalPaid, 0),
+      ekskul_transactions: enrollments.reduce((sum, item) => sum + item.transactionCount, 0),
+    };
+  });
+
+  if (keyword || digits) {
+    rows = rows.filter((row) => {
+      const haystack = normalizeText(
+        `${row.nama_lengkap} ${row.kelas} ${row.no_induk} ${row.ekskul_names.join(' ')}`,
+      );
+      if (keyword && haystack.includes(keyword)) return true;
+      if (digits && (String(row.no_induk).includes(digits) || String(row.nisn || '').includes(digits))) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  if (kelas) rows = rows.filter((row) => row.kelas === kelas);
+  if (tahunAjaran) rows = rows.filter((row) => row.tahun_ajaran_prefix === tahunAjaran);
+
+  const factor = order.direction === 'desc' ? -1 : 1;
+  rows.sort((a, b) => {
+    const av = a[order.field] ?? '';
+    const bv = b[order.field] ?? '';
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * factor;
+    return String(av).localeCompare(String(bv), 'id', { numeric: true }) * factor;
+  });
+
+  const total = rows.length;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  const start = (safePage - 1) * pageSize;
+
+  return {
+    data: rows.slice(start, start + pageSize),
+    total,
+    page: safePage,
+    pageSize,
+    totalPages,
+  };
+}
+
+/** Detail ekskul satu siswa. */
+export function getStudentEkskul(studentId) {
+  const db = getDB();
+  const student = (db.students || []).find((s) => s.id === studentId);
+  if (!student) return null;
+
+  const enrollments = enrollmentsOf(studentId).map(summarizeEnrollment);
+
+  return {
+    student,
+    enrollments,
+    totalFee: enrollments.reduce((sum, item) => sum + item.monthlyFee, 0),
+    totalPaid: enrollments.reduce((sum, item) => sum + item.totalPaid, 0),
+    getEnrollment: (enrollmentId) =>
+      enrollments.find((item) => item.id === enrollmentId) || null,
+  };
+}
+
+/** Statistik ringkas modul ekskul. */
+export function getEkskulStats() {
+  const db = getDB();
+  const enrollments = db.student_ekskul || [];
+  const payments = db.ekskul_payments || [];
+  const byEkskul = {};
+
+  enrollments.forEach((row) => {
+    const key = row.ekskul_nama || 'Lainnya';
+    byEkskul[key] = (byEkskul[key] || 0) + 1;
+  });
+
+  return {
+    participants: new Set(enrollments.map((row) => row.student_id)).size,
+    enrollments: enrollments.length,
+    totalPaid: payments.reduce((sum, p) => sum + (Number(p.nominal_bayar) || 0), 0),
+    transactions: payments.length,
+    byEkskul,
+    popular: Object.entries(byEkskul)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([nama, jumlah]) => ({ nama, jumlah })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Mutasi: pendaftaran ekskul                                          */
+/* ------------------------------------------------------------------ */
+export function addEnrollment(studentId, ekskulNama) {
+  const db = getDB();
+  const student = (db.students || []).find((s) => s.id === studentId);
+  if (!student) return { ok: false, error: 'Siswa tidak ditemukan.' };
+
+  const nama = String(ekskulNama || '').trim();
+  if (!nama) return { ok: false, error: 'Silakan pilih ekskul terlebih dahulu.' };
+
+  const exists = enrollmentsOf(studentId).some(
+    (row) => normalizeText(row.ekskul_nama) === normalizeText(nama),
+  );
+  if (exists) {
+    return { ok: false, error: `${student.nama_lengkap} sudah terdaftar di ekskul ${nama}.` };
+  }
+
+  const now = nowISO();
+  const enrollment = {
+    id: uid('eks'),
+    student_id: studentId,
+    ekskul_nama: nama,
+    biaya_bulanan: getEkskulFee(nama),
+    tahun_ajaran: getAcademicYearLabelFromNoInduk(student.no_induk),
+    status: 'aktif',
+    created_at: now,
+    updated_at: now,
+  };
+
+  commit((draft) => {
+    draft.student_ekskul = [...(draft.student_ekskul || []), enrollment];
+  });
+  return { ok: true, enrollment };
+}
+
+export function updateEnrollment(id, payload) {
+  const db = getDB();
+  const current = (db.student_ekskul || []).find((row) => row.id === id);
+  if (!current) return { ok: false, error: 'Data ekskul tidak ditemukan.' };
+
+  const nama = payload.ekskul_nama ?? current.ekskul_nama;
+  const updated = {
+    ...current,
+    ekskul_nama: nama,
+    biaya_bulanan:
+      payload.biaya_bulanan !== undefined ? Number(payload.biaya_bulanan) : getEkskulFee(nama),
+    updated_at: nowISO(),
+  };
+
+  commit((draft) => {
+    const index = (draft.student_ekskul || []).findIndex((row) => row.id === id);
+    if (index >= 0) draft.student_ekskul[index] = updated;
+    // Selaraskan nama ekskul pada riwayat pembayarannya.
+    draft.ekskul_payments = (draft.ekskul_payments || []).map((payment) =>
+      payment.student_ekskul_id === id ? { ...payment, ekskul_nama: updated.ekskul_nama } : payment,
+    );
+  });
+  return { ok: true, enrollment: updated };
+}
+
+export function removeEnrollment(id) {
+  const db = getDB();
+  const exists = (db.student_ekskul || []).some((row) => row.id === id);
+  if (!exists) return { ok: false, error: 'Data ekskul tidak ditemukan.' };
+
+  commit((draft) => {
+    draft.student_ekskul = (draft.student_ekskul || []).filter((row) => row.id !== id);
+    draft.ekskul_payments = (draft.ekskul_payments || []).filter(
+      (row) => row.student_ekskul_id !== id,
+    );
+  });
+  return { ok: true };
+}
+
+/** Hapus seluruh data ekskul (pendaftaran + pembayaran) milik satu siswa. */
+export function removeStudentEkskul(studentId) {
+  const enrollments = enrollmentsOf(studentId);
+  if (enrollments.length === 0) {
+    return { ok: false, error: 'Belum ada data ekskul untuk siswa ini.' };
+  }
+  const ids = new Set(enrollments.map((row) => row.id));
+
+  commit((draft) => {
+    draft.student_ekskul = (draft.student_ekskul || []).filter(
+      (row) => row.student_id !== studentId,
+    );
+    draft.ekskul_payments = (draft.ekskul_payments || []).filter(
+      (row) => !ids.has(row.student_ekskul_id),
+    );
+  });
+  return { ok: true, count: enrollments.length };
+}
+
+/* ------------------------------------------------------------------ */
+/* Mutasi: pembayaran ekskul                                           */
+/* ------------------------------------------------------------------ */
+export function getEnrollmentPayments(enrollmentId) {
+  return paymentsOf(enrollmentId);
+}
+
+/** Deteksi pembayaran ganda pada bulan yang sama. */
+export function checkDuplicateMonth(enrollmentId, bulan, excludePaymentId = null) {
+  const found = paymentsOf(enrollmentId).filter(
+    (row) => row.bulan === bulan && row.id !== excludePaymentId,
+  );
+  return {
+    hasDuplicate: found.length > 0,
+    count: found.length,
+    total: found.reduce((sum, row) => sum + (Number(row.nominal_bayar) || 0), 0),
+    payments: found,
+  };
+}
+
+/** Simulasi pembayaran tanpa menulis ke database. */
+export function previewEkskulPayment({ enrollmentId, bulan, nominal, excludePaymentId = null }) {
+  const db = getDB();
+  const enrollment = (db.student_ekskul || []).find((row) => row.id === enrollmentId);
+  if (!enrollment) return null;
+
+  const monthlyFee = Number(enrollment.biaya_bulanan) || getEkskulFee(enrollment.ekskul_nama);
+  const payments = paymentsOf(enrollmentId).filter((row) => row.id !== excludePaymentId);
+  const monthTotal = payments
+    .filter((row) => row.bulan === bulan)
+    .reduce((sum, row) => sum + (Number(row.nominal_bayar) || 0), 0);
+  const amount = Number(nominal) || 0;
+
+  return {
+    enrollment,
+    monthlyFee,
+    monthTotal,
+    projectedMonthTotal: monthTotal + amount,
+    amount,
+    isFull: monthTotal + amount >= monthlyFee,
+    isOverpay: monthTotal + amount > monthlyFee,
+    overpaid: Math.max(monthTotal + amount - monthlyFee, 0),
+    duplicate: checkDuplicateMonth(enrollmentId, bulan, excludePaymentId),
+  };
+}
+
+export function addEkskulPayment({
+  enrollmentId,
+  bulan,
+  nominal,
+  tanggalBayar,
+  keterangan,
+  createdBy,
+}) {
+  const db = getDB();
+  const enrollment = (db.student_ekskul || []).find((row) => row.id === enrollmentId);
+  if (!enrollment) return { ok: false, error: 'Data ekskul tidak ditemukan.' };
+  if (!bulan) return { ok: false, error: 'Bulan pembayaran wajib dipilih.' };
+  if (!MONTHS.includes(bulan)) return { ok: false, error: 'Bulan pembayaran tidak valid.' };
+
+  const amount = Number(nominal) || 0;
+  if (amount <= 0) return { ok: false, error: 'Nominal pembayaran harus lebih dari 0.' };
+
+  const now = nowISO();
+  const payment = {
+    id: uid('exp'),
+    student_ekskul_id: enrollmentId,
+    student_id: enrollment.student_id,
+    ekskul_nama: enrollment.ekskul_nama,
+    bulan,
+    tahun: new Date().getFullYear(),
+    nominal_bayar: amount,
+    tanggal_bayar: tanggalBayar || now.slice(0, 10),
+    keterangan: keterangan || null,
+    created_by: createdBy || 'Tata Usaha',
+    created_at: now,
+    updated_at: now,
+  };
+
+  commit((draft) => {
+    draft.ekskul_payments = [...(draft.ekskul_payments || []), payment];
+  });
+  return { ok: true, payment };
+}
+
+export function updateEkskulPayment(id, payload) {
+  const db = getDB();
+  const current = (db.ekskul_payments || []).find((row) => row.id === id);
+  if (!current) return { ok: false, error: 'Transaksi pembayaran tidak ditemukan.' };
+
+  const amount = payload.nominal !== undefined ? Number(payload.nominal) : current.nominal_bayar;
+  if (amount <= 0) return { ok: false, error: 'Nominal pembayaran harus lebih dari 0.' };
+
+  const updated = {
+    ...current,
+    bulan: payload.bulan ?? current.bulan,
+    nominal_bayar: amount,
+    tanggal_bayar: payload.tanggalBayar ?? current.tanggal_bayar,
+    keterangan: payload.keterangan ?? current.keterangan,
+    updated_at: nowISO(),
+  };
+
+  commit((draft) => {
+    const index = (draft.ekskul_payments || []).findIndex((row) => row.id === id);
+    if (index >= 0) draft.ekskul_payments[index] = updated;
+  });
+  return { ok: true, payment: updated };
+}
+
+export function deleteEkskulPayment(id) {
+  const exists = (getDB().ekskul_payments || []).some((row) => row.id === id);
+  if (!exists) return { ok: false, error: 'Transaksi pembayaran tidak ditemukan.' };
+
+  commit((draft) => {
+    draft.ekskul_payments = (draft.ekskul_payments || []).filter((row) => row.id !== id);
+  });
+  return { ok: true };
+}
+
+export { MONTHS };

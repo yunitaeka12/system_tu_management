@@ -1,0 +1,16 @@
+# Konfigurasi deploy Netlify
+# Dashboard → Site configuration → Build & deploy akan membaca file ini.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# React Router memakai BrowserRouter, jadi semua rute harus diarahkan ke
+# index.html (kalau tidak, halaman akan 404 saat di-refresh / dibuka langsung).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

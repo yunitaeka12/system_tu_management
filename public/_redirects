@@ -1,0 +1,4 @@
+# Semua rute diarahkan ke index.html agar react-router (BrowserRouter)
+# tetap bekerja saat halaman di-refresh atau dibuka langsung (deep link).
+# Dipakai oleh Netlify/Cloudflare Pages; Vercel memakai vercel.json.
+/*    /index.html   200

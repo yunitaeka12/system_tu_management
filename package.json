@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Sistem Informasi Tata Usaha SDIT As-Salam Islamic Green School",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

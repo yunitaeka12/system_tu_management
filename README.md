@@ -47,6 +47,44 @@ tabelnya masih kosong.
 BUKU_INDUK_PATH="/path/ke/BUKU INDUK SISWA.xlsx" npm run seed
 ```
 
+## Deploy ke Netlify (online)
+
+1. Buka <https://app.netlify.com/start> → **Import an existing project** → **GitHub**.
+2. Pilih repo **`yunitaeka12/system_tu_management`** (branch `main`).
+   Netlify sudah otomatis membaca `netlify.toml`:
+   build command `npm run build`, publish directory `dist`.
+3. Buka **Site configuration → Environment variables → Add a variable**, lalu tambahkan dua nilai
+   dari Supabase (**Project Settings → API**):
+
+   | Key | Value |
+   | --- | --- |
+   | `VITE_SUPABASE_URL` | `https://ojuwshddsocrjajkhlbv.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | anon public key project Anda |
+
+4. Klik **Deploy site**. Setiap `git push` ke `main` akan otomatis ter-deploy ulang.
+
+### Hal penting soal environment variable
+
+- Vite hanya meneruskan variabel yang berawalan **`VITE_`** ke kode, dan nilainya
+  **dibekukan saat build**. Jadi setelah menambah/mengubah variabel, lakukan
+  **Deploys → Trigger deploy → Clear cache and deploy site**.
+- `VITE_SUPABASE_ANON_KEY` **bukan rahasia** (memang dipakai di sisi browser).
+  Yang melindungi data adalah **RLS di Supabase**, bukan kerahasiaan key ini.
+- File `.env` **tidak ikut ke GitHub** (sudah ada di `.gitignore`); pakai
+  `.env.example` sebagai panduan untuk di komputer lokal.
+- Alternatif tanpa Git: `npm run build` lalu tarik folder `dist` ke
+  <https://app.netlify.com/drop> (isi environment variable tetap perlu diatur di dashboard).
+
+> ⚠️ **Keamanan:** pada `supabase/schema.sql`, RLS dibuat permisif karena aplikasi
+> belum memakai Supabase Auth. Artinya siapa pun yang tahu URL situs + anon key
+> dapat membaca/menulis data siswa langsung lewat API. Sebelum situs dibagikan
+> luas, aktifkan Supabase Auth lalu perketat policy RLS.
+
+### Alternatif hosting
+
+Repo ini juga siap untuk **Vercel** (`vercel.json`) dan **Cloudflare Pages**
+(memakai `public/_redirects`) tanpa perubahan kode.
+
 ## Akun bawaan
 
 | Role | Email | Password |

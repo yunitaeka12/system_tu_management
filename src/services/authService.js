@@ -39,6 +39,7 @@ export const DEFAULT_PERMISSIONS = {
     'payment.update',
     'payment.delete',
     'user.manage',
+    'settings.manage',
   ],
   tu: [
     'student.view',
@@ -66,6 +67,7 @@ export const ALL_PERMISSIONS = [
   { key: 'payment.update', label: 'Ubah pembayaran', group: 'Keuangan' },
   { key: 'payment.delete', label: 'Hapus pembayaran', group: 'Keuangan' },
   { key: 'user.manage', label: 'Kelola pengguna & hak akses', group: 'Administrasi' },
+  { key: 'settings.manage', label: 'Ubah pengaturan tarif', group: 'Administrasi' },
 ];
 
 /**
@@ -147,11 +149,15 @@ export const DEFAULT_PASSWORD = 'default123';
  */
 export const SEED_USERS = [
   {
+    // id sengaja tetap (deterministik) agar tidak bentrok email saat
+    // beberapa browser/komputer menyiapkan akun bawaan yang sama.
+    id: 'usr_admin_assalam',
     email: 'admin@assalam.sch.id',
     name: 'Administrator TU',
     role: ROLES.ADMINISTRATOR,
   },
   {
+    id: 'usr_yunitaeka',
     email: 'yunitaeka124@gmail.com',
     name: 'Yunita Eka',
     role: ROLES.TU,
@@ -169,6 +175,7 @@ export async function ensureSeedUsers() {
   const db = getDB();
   const users = [...(db.users || [])];
   const created = [];
+  let migrated = false;
 
   for (const seed of SEED_USERS) {
     const existing = users.find(
@@ -177,7 +184,7 @@ export async function ensureSeedUsers() {
 
     if (!existing) {
       const user = {
-        id: uid('usr'),
+        id: seed.id || uid('usr'),
         email: seed.email,
         name: seed.name,
         role: seed.role,
@@ -197,11 +204,13 @@ export async function ensureSeedUsers() {
       if (await verifyPassword(legacy, existing.password_hash)) {
         existing.password_hash = await hashPassword(DEFAULT_PASSWORD);
         existing.must_change_password = true;
+        migrated = true;
       }
     }
   }
 
-  if (created.length > 0 || users.some((u) => u.must_change_password !== undefined)) {
+  // Hanya tulis ke database bila memang ada perubahan.
+  if (created.length > 0 || migrated) {
     commit((draft) => {
       draft.users = users;
     });

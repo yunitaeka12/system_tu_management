@@ -12,6 +12,7 @@ const LABELS = {
   pembayaran: 'Pembayaran',
   ekskul: 'Ekskul',
   admin: 'Admin Panel',
+  pengaturan: 'Pengaturan',
   profil: 'Profil',
   import: 'Import Excel',
   baru: 'Tambah Siswa',

@@ -8,6 +8,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
   ShieldCheck,
   X,
 } from 'lucide-react';
@@ -63,7 +64,16 @@ function NavItem({ item, collapsed, onNavigate }) {
   );
 }
 
-function SidebarContent({ collapsed, onNavigate, onToggle, onLogout, user, roleLabel, isAdmin }) {
+function SidebarContent({
+  collapsed,
+  onNavigate,
+  onToggle,
+  onLogout,
+  user,
+  roleLabel,
+  isAdmin,
+  canSettings,
+}) {
   return (
     <div className="flex h-full flex-col">
       {/* Brand */}
@@ -103,18 +113,27 @@ function SidebarContent({ collapsed, onNavigate, onToggle, onLogout, user, roleL
           <NavItem key={item.to} item={item} collapsed={collapsed} onNavigate={onNavigate} />
         ))}
 
-        {isAdmin && (
+        {(isAdmin || canSettings) && (
           <div className="pt-3">
             {!collapsed && (
               <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Administrator
+                Administrasi
               </p>
             )}
-            <NavItem
-              item={{ to: '/admin', label: 'Admin Panel', icon: ShieldCheck }}
-              collapsed={collapsed}
-              onNavigate={onNavigate}
-            />
+            {canSettings && (
+              <NavItem
+                item={{ to: '/pengaturan', label: 'Pengaturan', icon: Settings }}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
+            )}
+            {isAdmin && (
+              <NavItem
+                item={{ to: '/admin', label: 'Admin Panel', icon: ShieldCheck }}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
+            )}
           </div>
         )}
       </nav>
@@ -154,7 +173,8 @@ function SidebarContent({ collapsed, onNavigate, onToggle, onLogout, user, roleL
 }
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
-  const { user, roleLabel, logout, isAdministrator } = useAuth();
+  const { user, roleLabel, logout, isAdministrator, can } = useAuth();
+  const canSettings = can('settings.manage');
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -185,6 +205,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
           user={user}
           roleLabel={roleLabel}
           isAdmin={isAdministrator}
+          canSettings={canSettings}
         />
       </motion.aside>
 
@@ -222,6 +243,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
                 user={user}
                 roleLabel={roleLabel}
                 isAdmin={isAdministrator}
+                canSettings={canSettings}
               />
             </motion.aside>
           </>

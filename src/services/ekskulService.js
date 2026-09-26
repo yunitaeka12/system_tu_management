@@ -11,35 +11,29 @@
 import { getDB, commit } from '../lib/db';
 import { uid, normalizeText } from '../utils/helpers';
 import {
+  DEFAULT_EKSKUL_FEE,
+  ekskulFeeByName,
+  getEkskulOptions as getEkskulOptionsFromSettings,
+} from './settingsService';
+
+export { DEFAULT_EKSKUL_FEE };
+import {
   MONTHS,
   getAcademicYearFromNoInduk,
   getAcademicYearLabelFromNoInduk,
 } from '../utils/paymentCalculator';
 
-/** Daftar ekskul yang tersedia beserta biaya bulanannya. */
-export const EKSKUL_OPTIONS = [
-  { nama: 'Karate', biaya: 20000 },
-  { nama: 'Badminton', biaya: 20000 },
-  { nama: 'Futsal', biaya: 20000 },
-  { nama: 'Tari', biaya: 20000 },
-  { nama: 'English Club', biaya: 20000 },
-  { nama: 'Arabic Club', biaya: 20000 },
-  { nama: 'Japanese Club', biaya: 20000 },
-  { nama: 'Qasidah', biaya: 25000 },
-  { nama: 'Drumband', biaya: 25000 },
-  { nama: 'Hadroh', biaya: 25000 },
-  { nama: 'Marawis', biaya: 25000 },
-  { nama: 'Cergam', biaya: 20000 },
-  { nama: 'Kaligrafi', biaya: 20000 },
-];
-
-export const DEFAULT_EKSKUL_FEE = 20000;
+/**
+ * Daftar ekskul beserta biaya bulanannya — diambil dari menu Pengaturan
+ * (lihat settingsService) sehingga bisa diubah Administrator.
+ */
+export function getEkskulOptions() {
+  return getEkskulOptionsFromSettings();
+}
 
 /** Cari biaya bulanan berdasarkan nama ekskul (case-insensitive). */
 export function getEkskulFee(nama) {
-  const key = normalizeText(nama);
-  const found = EKSKUL_OPTIONS.find((item) => normalizeText(item.nama) === key);
-  return found?.biaya ?? DEFAULT_EKSKUL_FEE;
+  return ekskulFeeByName(nama);
 }
 
 const nowISO = () => new Date().toISOString();

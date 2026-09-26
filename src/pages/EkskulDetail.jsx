@@ -9,7 +9,7 @@ import PaymentHistory from '../components/payment/PaymentHistory';
 import EkskulPaymentForm from '../components/ekskul/EkskulPaymentForm';
 import { useStudentEkskul } from '../hooks/useEkskul';
 import {
-  EKSKUL_OPTIONS,
+  getEkskulOptions,
   addEkskulPayment,
   addEnrollment,
   deleteEkskulPayment,
@@ -70,10 +70,12 @@ export default function EkskulDetail() {
   }
 
   const { student, enrollments } = detail;
+  // Daftar ekskul mengikuti pengaturan terbaru (menu Pengaturan).
+  const ekskulOptions = getEkskulOptions();
 
   /* ---------------- Pendaftaran ekskul ---------------- */
   const openAddEnrollment = () => {
-    const available = EKSKUL_OPTIONS.find(
+    const available = ekskulOptions.find(
       (item) => !enrollments.some((row) => row.ekskul_nama === item.nama),
     );
     setSelectedEkskul(available?.nama ?? '');
@@ -395,7 +397,7 @@ export default function EkskulDetail() {
               className="input"
             >
               <option value="">Pilih Ekskul</option>
-              {EKSKUL_OPTIONS.map((item) => (
+              {ekskulOptions.map((item) => (
                 <option
                   key={item.nama}
                   value={item.nama}

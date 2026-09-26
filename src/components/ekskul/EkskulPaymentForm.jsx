@@ -4,7 +4,7 @@ import FormField from '../FormField';
 import { MONTHS } from '../../utils/paymentCalculator';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '../../utils/currency';
 import { cn } from '../../utils/helpers';
-import { EKSKUL_OPTIONS, getEkskulFee } from '../../services/ekskulService';
+import { getEkskulFee } from '../../services/ekskulService';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -264,4 +264,3 @@ export default function EkskulPaymentForm({
   );
 }
 
-export { EKSKUL_OPTIONS };

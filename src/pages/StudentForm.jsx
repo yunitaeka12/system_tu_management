@@ -238,8 +238,8 @@ export default function StudentForm({ mode = 'create' }) {
           <div>
             <p className="text-sm font-semibold text-primary-900">Tagihan dihitung otomatis</p>
             <p className="text-xs text-primary-700/80">
-              Nominal mengikuti tahun angkatan (2 digit awal No Induk): 21/22/23 → Rp 260.000/bulan,
-              24/25/26 → Rp 270.000/bulan. Total tahunan = bulanan × 12.
+              Nominal mengikuti tahun angkatan (2 digit awal No Induk). Tarif dapat diubah pada menu
+              Pengaturan. Total tahunan = bulanan × 12.
             </p>
           </div>
         </div>

@@ -338,7 +338,16 @@ async function pushTable(table) {
 
   for (let i = 0; i < changed.length; i += UPSERT_CHUNK) {
     const chunk = changed.slice(i, i + UPSERT_CHUNK);
-    const { error } = await supabase.from(table).upsert(chunk, { onConflict: 'id' });
+    // eslint-disable-next-line no-await-in-loop
+    let { error } = await supabase.from(table).upsert(chunk, { onConflict: 'id' });
+
+    // Akun dengan email sama tetapi id berbeda (mis. dibuat di komputer lain)
+    // diselaraskan lewat email agar tidak gagal karena unique constraint.
+    if (error && table === 'users' && /duplicate key|users_email_key/i.test(error.message)) {
+      // eslint-disable-next-line no-await-in-loop
+      ({ error } = await supabase.from(table).upsert(chunk, { onConflict: 'email' }));
+    }
+
     if (error) throw new Error(`${table}: ${error.message}`);
   }
 
@@ -418,6 +427,43 @@ export function schedulePush(delay = PUSH_DEBOUNCE_MS) {
   }, delay);
 }
 
+/**
+ * Selaraskan akun lokal dengan akun yang ada di Supabase (dimenangkan
+ * Supabase). Mencegah error "duplicate key users_email_key" ketika akun
+ * bawaan dibuat ulang di browser/komputer lain.
+ */
+function mergeRemoteUsers(remoteUsers) {
+  const local = getDB();
+  const byEmail = new Map(
+    (local.users || []).map((user) => [String(user.email).toLowerCase(), user]),
+  );
+  let changed = false;
+
+  remoteUsers.forEach((remote) => {
+    const key = String(remote.email).toLowerCase();
+    const existing = byEmail.get(key);
+    if (!existing) {
+      local.users.push(remote);
+      byEmail.set(key, remote);
+      changed = true;
+      return;
+    }
+    if (existing.id !== remote.id) {
+      const index = local.users.findIndex((user) => user.id === existing.id);
+      if (index >= 0) local.users[index] = { ...existing, ...remote };
+      byEmail.set(key, remote);
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    persist(local);
+    pushedSnapshot.set('users', snapshotTable('users'));
+    notify();
+  }
+  return changed;
+}
+
 async function fetchAll(table) {
   const rows = [];
   let from = 0;
@@ -451,12 +497,13 @@ export async function initDB() {
 
     // Ada perubahan lokal yang belum terkirim? Utamakan data lokal.
     if (!isDirty()) {
+      const remoteUsers = await fetchAll('users');
       const remoteStudents = await fetchAll('students');
+
       if (remoteStudents.length > 0) {
-        const [academic_years, users, payments, student_ekskul, ekskul_payments, metaRows] =
+        const [academic_years, payments, student_ekskul, ekskul_payments, metaRows] =
           await Promise.all([
             fetchAll('academic_years'),
-            fetchAll('users'),
             fetchAll('payments'),
             fetchAll('student_ekskul'),
             fetchAll('ekskul_payments'),
@@ -469,7 +516,7 @@ export async function initDB() {
           version: DB_VERSION,
           academic_years,
           students: remoteStudents,
-          users,
+          users: remoteUsers,
           payments,
           student_ekskul,
           ekskul_payments,
@@ -481,6 +528,12 @@ export async function initDB() {
         syncState.synced();
         notify();
         return cache;
+      }
+
+      // Tabel siswa masih kosong, tetapi mungkin akun pengguna sudah ada:
+      // pakai baris dari Supabase agar tidak bentrok unique email saat push.
+      if (remoteUsers.length > 0 && mergeRemoteUsers(remoteUsers)) {
+        syncState.pulled();
       }
     }
 

@@ -14,6 +14,7 @@
  *
  * Total tagihan tahunan = tagihan bulanan × 12.
  */
+import { sppRateForPrefix } from '../services/settingsService';
 
 export const MONTHS = [
   'Januari',
@@ -64,7 +65,8 @@ export const PAYMENT_STATUS_LABEL = {
  */
 export function getMonthlyFee(noInduk) {
   const prefix = String(noInduk ?? '').trim().slice(0, 2);
-  return MONTHLY_FEE_BY_PREFIX[prefix] ?? DEFAULT_MONTHLY_FEE;
+  // Tarif diambil dari menu Pengaturan (bisa diubah Administrator).
+  return sppRateForPrefix(prefix);
 }
 
 /**

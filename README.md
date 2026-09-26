@@ -12,6 +12,7 @@ dan panel administrator. Dibangun dengan React + Vite, data tersimpan di
 | **Buku Induk** | Master data 1.200+ siswa, pencarian, filter kelas/rombel/tahun ajaran, import & export Excel |
 | **Pembayaran** | Pencatatan SPP per bulan, peta warna bulanan (merah/kuning/hijau), riwayat + pagination |
 | **Ekskul** | Pendaftaran ekskul (13 pilihan + biaya), pembayaran per bulan, riwayat |
+| **Pengaturan** | Ubah tarif SPP per angkatan dan biaya tiap ekskul (plus tambah/hapus angkatan & ekskul) |
 | **Admin Panel** | Kelola pengguna, hak akses per role & per pengguna, hapus massal per kelas/tahun ajaran (tema gelap) |
 | **Keamanan** | Login 3x salah → akun terkunci, popup ganti password, verifikasi password tiap 3 jam, auto logout 1 menit |
 
@@ -64,6 +65,7 @@ src/
 ├─ context/         # AuthContext (sesi & hak akses), DataContext (reaktivitas data)
 ├─ hooks/           # useStudents, usePayments, useEkskul, ...
 ├─ lib/             # db.js (local-first + sinkronisasi Supabase), supabase.js, toast.js
+├─ services/settingsService.js  # tarif SPP & biaya ekskul (tersimpan di db.meta.settings)
 ├─ pages/           # halaman per fitur
 ├─ services/        # lapisan data: student, payment, ekskul, auth
 └─ utils/           # paymentCalculator, currency, helpers

@@ -17,6 +17,7 @@ import AddPembayaran from './pages/AddPembayaran';
 import Ekskul from './pages/Ekskul';
 import EkskulDetail from './pages/EkskulDetail';
 import AdminPanel from './pages/AdminPanel';
+import Pengaturan from './pages/Pengaturan';
 import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 
@@ -87,6 +88,7 @@ function AppRoutes() {
         <Route path="/ekskul" element={<Ekskul />} />
         <Route path="/ekskul/:studentId" element={<EkskulDetail />} />
         <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/pengaturan" element={<Pengaturan />} />
         <Route path="/profil" element={<Profile />} />
       </Route>
 

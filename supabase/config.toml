@@ -1,0 +1,18 @@
+# Konfigurasi Supabase CLI untuk proyek TU SDIT As-Salam.
+#
+# Dipakai hanya saat deploy Edge Function `admin-users` (pembuat akun login
+# Supabase Auth dari Admin Panel):
+#
+#   npx supabase login
+#   npx supabase functions deploy admin-users --project-ref ojuwshddsocrjajkhlbv --use-api
+#
+# `--use-api` dipakai karena Docker tidak terpasang (bundling dijalankan di
+# server Supabase, bukan lokal).
+
+project_id = "ojuwshddsocrjajkhlbv"
+
+[functions.admin-users]
+# Aplikasi selalu mengirim token sesi login (Authorization: Bearer …), dan
+# fungsi memverifikasi sendiri bahwa pemanggilnya benar-benar Administrator —
+# jadi JWT tetap diminta.
+verify_jwt = true

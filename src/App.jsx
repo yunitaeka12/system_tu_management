@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 
@@ -14,6 +15,7 @@ import ImportBukuInduk from './pages/ImportBukuInduk';
 import Pembayaran from './pages/Pembayaran';
 import PaymentDetail from './pages/PaymentDetail';
 import AddPembayaran from './pages/AddPembayaran';
+import ReportPembayaran from './pages/ReportPembayaran';
 import AdminPanel from './pages/AdminPanel';
 import Pengaturan from './pages/Pengaturan';
 import Profile from './pages/Profile';
@@ -48,6 +50,33 @@ function PublicOnlyRoute({ children }) {
 }
 
 /**
+ * Batasi halaman berdasarkan hak akses. Mencegah pengguna yang hanya boleh
+ * melihat data membuka halaman tambah/ubah/import lewat URL langsung.
+ */
+function RequirePermission({ permission, children }) {
+  const { can } = useAuth();
+  if (!can(permission)) {
+    return (
+      <div className="card card-pad text-center">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg bg-slate-100 text-slate-400">
+          <ShieldCheck size={26} />
+        </div>
+        <h1 className="mt-4 text-lg font-bold text-slate-900">Akses Terbatas</h1>
+        <p className="mx-auto mt-1.5 max-w-sm text-sm text-slate-500">
+          Akun Anda tidak memiliki hak untuk menambah atau mengubah data. Hubungi Administrator bila
+          memang membutuhkannya.
+        </p>
+        <Link to="/" className="btn-primary mt-5 inline-flex">
+          <ArrowLeft size={16} />
+          Kembali ke Dashboard
+        </Link>
+      </div>
+    );
+  }
+  return children;
+}
+
+/**
  * Catatan penting: TIDAK memakai <AnimatePresence mode="wait"> di sekitar
  * <Routes key={pathname}>. Pola itu me-remount seluruh <Layout /> (termasuk
  * Sidebar) saat transisi keluar, sehingga dua Sidebar dengan `layoutId`
@@ -76,15 +105,58 @@ function AppRoutes() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/buku-induk" element={<BukuInduk />} />
-        <Route path="/buku-induk/import" element={<ImportBukuInduk />} />
-        <Route path="/buku-induk/baru" element={<StudentForm mode="create" />} />
+        <Route
+          path="/buku-induk/import"
+          element={
+            <RequirePermission permission="student.import">
+              <ImportBukuInduk />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="/buku-induk/baru"
+          element={
+            <RequirePermission permission="student.create">
+              <StudentForm mode="create" />
+            </RequirePermission>
+          }
+        />
         <Route path="/buku-induk/:id" element={<StudentDetail />} />
-        <Route path="/buku-induk/:id/edit" element={<StudentForm mode="edit" />} />
+        <Route
+          path="/buku-induk/:id/edit"
+          element={
+            <RequirePermission permission="student.update">
+              <StudentForm mode="edit" />
+            </RequirePermission>
+          }
+        />
         <Route path="/pembayaran" element={<Pembayaran />} />
-        <Route path="/pembayaran/:studentId/tambah" element={<AddPembayaran />} />
+        <Route
+          path="/pembayaran/:studentId/tambah"
+          element={
+            <RequirePermission permission="payment.create">
+              <AddPembayaran />
+            </RequirePermission>
+          }
+        />
         <Route path="/pembayaran/:studentId" element={<PaymentDetail />} />
+        <Route
+          path="/report"
+          element={
+            <RequirePermission permission="payment.view">
+              <ReportPembayaran />
+            </RequirePermission>
+          }
+        />
         <Route path="/admin" element={<AdminPanel />} />
-        <Route path="/pengaturan" element={<Pengaturan />} />
+        <Route
+          path="/pengaturan"
+          element={
+            <RequirePermission permission="settings.manage">
+              <Pengaturan />
+            </RequirePermission>
+          }
+        />
         <Route path="/profil" element={<Profile />} />
       </Route>
 

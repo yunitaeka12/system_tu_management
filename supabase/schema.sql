@@ -100,6 +100,7 @@ create table if not exists public.users (
 -- Untuk database yang sudah ada sebelumnya (idempotent).
 alter table public.users add column if not exists auth_user_id uuid unique;
 alter table public.users add column if not exists auth_provider text default 'email';
+alter table public.payments add column if not exists jenis text not null default 'spp';
 
 -- ---------------------------------------------------------------------
 -- Pembayaran SPP bulanan (join ke students)
@@ -109,6 +110,8 @@ create table if not exists public.payments (
   student_id text references public.students (id) on delete cascade,
   bulan text not null,
   tahun integer,
+  -- 'spp' = tagihan bulanan, 'lain' = pembayaran lain-lain (tidak mengurangi SPP).
+  jenis text not null default 'spp',
   academic_year_id text,
   nominal_bayar numeric not null default 0,
   tanggal_bayar date,
@@ -158,6 +161,29 @@ create table if not exists public.ekskul_payments (
 create index if not exists ekskul_payments_student_idx on public.ekskul_payments (student_id);
 
 -- ---------------------------------------------------------------------
+-- Adjustment / potongan tagihan SPP
+-- Pembayaran yang sudah tercatat di pembukuan sebelumnya (di luar aplikasi).
+-- Nominalnya dihitung sebagai sudah dibayar, sedangkan bulan yang dicentang
+-- (`bulan`) langsung dianggap lunas pada peta pembayaran bulanan.
+-- ---------------------------------------------------------------------
+create table if not exists public.payment_adjustments (
+  id text primary key,
+  student_id text references public.students (id) on delete cascade,
+  -- Tahun MULAI periode tahun ajaran (Juli–Juni), mis. 2025 = "Juli 2025–Juni 2026".
+  tahun integer,
+  nominal numeric not null default 0,
+  -- Daftar nama bulan yang dicentang, mis. ["Juli","Agustus"].
+  bulan jsonb not null default '[]'::jsonb,
+  keterangan text,
+  created_by text,
+  created_at timestamptz default now(),
+  updated_at timestamptz
+);
+
+create index if not exists payment_adjustments_student_idx
+  on public.payment_adjustments (student_id);
+
+-- ---------------------------------------------------------------------
 -- Meta aplikasi (counter, jejak import, dll.)
 -- ---------------------------------------------------------------------
 create table if not exists public.app_meta (
@@ -175,6 +201,7 @@ alter table public.users enable row level security;
 alter table public.payments enable row level security;
 alter table public.student_ekskul enable row level security;
 alter table public.ekskul_payments enable row level security;
+alter table public.payment_adjustments enable row level security;
 alter table public.app_meta enable row level security;
 
 do $$
@@ -183,7 +210,7 @@ declare
 begin
   foreach t in array array[
     'academic_years', 'students', 'users', 'payments',
-    'student_ekskul', 'ekskul_payments', 'app_meta'
+    'student_ekskul', 'ekskul_payments', 'payment_adjustments', 'app_meta'
   ]
   loop
     execute format('drop policy if exists %I on public.%I', t || '_full_access', t);

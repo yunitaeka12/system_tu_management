@@ -17,6 +17,11 @@ const TONES = {
 };
 
 export default function PaymentSummary({ summary, monthlyFee, className }) {
+  const periodRange = summary.periodRange ?? null;
+  const unpaidMonths = summary.unpaidMonthCount ?? 0;
+  const totalMonths = summary.totalMonths ?? 12;
+  const periodCount = summary.periods?.length ?? 1;
+
   return (
     <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>
       {CARDS.map((card, index) => {
@@ -37,19 +42,41 @@ export default function PaymentSummary({ summary, monthlyFee, className }) {
                 <p className="mt-2 truncate text-xl font-bold tracking-tight text-slate-900">
                   {formatCurrency(summary[card.key])}
                 </p>
-                {card.key === 'annualFee' && monthlyFee ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Bulanan {formatCurrency(monthlyFee)}
-                  </p>
+                {card.key === 'annualFee' ? (
+                  <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                    {monthlyFee ? <p>Bulanan {formatCurrency(monthlyFee)}</p> : null}
+                    {periodCount > 1 ? (
+                      <p>
+                        {periodCount} periode tahun ajaran
+                        {summary.periodRange ? ` (${summary.periodRange})` : ''}
+                      </p>
+                    ) : periodRange ? (
+                      <p>Periode {periodRange}</p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {card.key === 'totalPaid' && summary.totalPaid > 0 ? (
                   <p className="mt-1 text-xs text-slate-500">
                     {formatPercent(summary.progress, 0)} dari tagihan
+                    {summary.adjustmentTotal > 0
+                      ? ` • termasuk adjustment ${formatCurrency(summary.adjustmentTotal)}`
+                      : ''}
                   </p>
                 ) : null}
-                {card.key === 'remaining' && summary.remaining === 0 ? (
-                  <p className="mt-1 text-xs text-school-600">Tidak ada sisa tagihan</p>
-                ) : null}
+                {card.key === 'remaining' &&
+                  (summary.remaining === 0 ? (
+                    <p className="mt-1 text-xs text-school-600">
+                      Tidak ada sisa tagihan
+                      {periodRange ? ` • ${periodRange}` : ''}
+                    </p>
+                  ) : (
+                    <div className="mt-1 space-y-0.5 text-xs">
+                      {periodRange ? <p className="text-slate-500">Periode {periodRange}</p> : null}
+                      <p className="font-medium text-red-600">
+                        Tunggakan {unpaidMonths} bulan • {formatCurrency(summary.remaining)}
+                      </p>
+                    </div>
+                  ))}
               </div>
               <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', TONES[card.tone])}>
                 <Icon size={19} />
@@ -72,7 +99,9 @@ export default function PaymentSummary({ summary, monthlyFee, className }) {
               <PaymentStatusBadge status={summary.status} />
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              {summary.paidMonths.length} dari 12 bulan terbayar
+              {summary.paidMonthCount ?? summary.paidMonths?.length ?? 0} dari {totalMonths} bulan
+              terbayar
+              {periodCount > 1 ? ` • ${periodCount} periode` : ''}
             </p>
           </div>
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">

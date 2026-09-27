@@ -45,13 +45,60 @@ export function usePayments({
   return { ...result, isSearching: search !== debouncedSearch };
 }
 
-/** Ringkasan + riwayat pembayaran satu siswa. */
-export function useStudentPayment(studentId) {
+/**
+ * Ringkasan + riwayat pembayaran satu siswa untuk satu periode tahun ajaran.
+ * `periodStart` = tahun mulai periode (mis. 2025); kosong berarti periode
+ * berjalan.
+ */
+export function useStudentPayment(studentId, periodStart = null) {
   const { version } = useData();
   return useMemo(
-    () => (studentId ? paymentService.getStudentPaymentSummary(studentId) : null),
+    () =>
+      studentId ? paymentService.getStudentPaymentSummary(studentId, periodStart) : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [studentId, version],
+    [studentId, periodStart, version],
+  );
+}
+
+/** Data report pembayaran (satu baris per siswa + rincian periode & riwayat). */
+export function usePaymentReport({
+  search = '',
+  kelas = '',
+  tahunAjaran = '',
+  status = '',
+  page = 1,
+  pageSize = 10,
+  all = false,
+  order = { field: 'nama_lengkap', direction: 'asc' },
+  debounceMs = 300,
+} = {}) {
+  const { version } = useData();
+  const debouncedSearch = useDebounce(search, debounceMs);
+  return useMemo(
+    () =>
+      paymentService.getPaymentReport({
+        search: debouncedSearch,
+        kelas,
+        tahunAjaran,
+        status,
+        page,
+        pageSize,
+        all,
+        order,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      debouncedSearch,
+      kelas,
+      tahunAjaran,
+      status,
+      page,
+      pageSize,
+      all,
+      order.field,
+      order.direction,
+      version,
+    ],
   );
 }
 

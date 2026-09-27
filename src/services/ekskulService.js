@@ -19,9 +19,21 @@ import {
 export { DEFAULT_EKSKUL_FEE };
 import {
   MONTHS,
+  currentPeriodStart,
   getAcademicYearFromNoInduk,
   getAcademicYearLabelFromNoInduk,
+  monthsOfPeriod,
+  periodStartOf,
 } from '../utils/paymentCalculator';
+
+/**
+ * Tahun pembayaran ekskul: bulan Januari–Juni masuk tahun berikutnya, mengikuti
+ * periode tahun ajaran berjalan (mulai Juli).
+ */
+function paymentYearFor(bulan, periodStart = currentPeriodStart()) {
+  const found = monthsOfPeriod(periodStart).find((item) => item.bulan === bulan);
+  return found?.tahun ?? new Date().getFullYear();
+}
 
 /**
  * Daftar ekskul beserta biaya bulanannya — diambil dari menu Pengaturan
@@ -345,10 +357,18 @@ export function getEnrollmentPayments(enrollmentId) {
   return paymentsOf(enrollmentId);
 }
 
-/** Deteksi pembayaran ganda pada bulan yang sama. */
-export function checkDuplicateMonth(enrollmentId, bulan, excludePaymentId = null) {
+/**
+ * Deteksi pembayaran ganda pada bulan yang sama. Bila `periodStart` diisi,
+ * bulan yang sama pada periode tahun ajaran lain bukan duplikat.
+ */
+export function checkDuplicateMonth(enrollmentId, bulan, excludePaymentId = null, periodStart = null) {
   const found = paymentsOf(enrollmentId).filter(
-    (row) => row.bulan === bulan && row.id !== excludePaymentId,
+    (row) =>
+      row.bulan === bulan &&
+      row.id !== excludePaymentId &&
+      (periodStart === null ||
+        periodStart === undefined ||
+        periodStartOf(row.bulan, row.tahun) === Number(periodStart)),
   );
   return {
     hasDuplicate: found.length > 0,
@@ -359,13 +379,22 @@ export function checkDuplicateMonth(enrollmentId, bulan, excludePaymentId = null
 }
 
 /** Simulasi pembayaran tanpa menulis ke database. */
-export function previewEkskulPayment({ enrollmentId, bulan, nominal, excludePaymentId = null }) {
+export function previewEkskulPayment({
+  enrollmentId,
+  bulan,
+  nominal,
+  excludePaymentId = null,
+  periodStart = null,
+}) {
   const db = getDB();
   const enrollment = (db.student_ekskul || []).find((row) => row.id === enrollmentId);
   if (!enrollment) return null;
 
   const monthlyFee = Number(enrollment.biaya_bulanan) || getEkskulFee(enrollment.ekskul_nama);
-  const payments = paymentsOf(enrollmentId).filter((row) => row.id !== excludePaymentId);
+  const scope = Number(periodStart) || currentPeriodStart();
+  const payments = paymentsOf(enrollmentId)
+    .filter((row) => row.id !== excludePaymentId)
+    .filter((row) => periodStartOf(row.bulan, row.tahun) === scope);
   const monthTotal = payments
     .filter((row) => row.bulan === bulan)
     .reduce((sum, row) => sum + (Number(row.nominal_bayar) || 0), 0);
@@ -380,7 +409,7 @@ export function previewEkskulPayment({ enrollmentId, bulan, nominal, excludePaym
     isFull: monthTotal + amount >= monthlyFee,
     isOverpay: monthTotal + amount > monthlyFee,
     overpaid: Math.max(monthTotal + amount - monthlyFee, 0),
-    duplicate: checkDuplicateMonth(enrollmentId, bulan, excludePaymentId),
+    duplicate: checkDuplicateMonth(enrollmentId, bulan, excludePaymentId, scope),
   };
 }
 
@@ -390,6 +419,7 @@ export function addEkskulPayment({
   nominal,
   tanggalBayar,
   keterangan,
+  tahun,
   createdBy,
 }) {
   const db = getDB();
@@ -408,7 +438,7 @@ export function addEkskulPayment({
     student_id: enrollment.student_id,
     ekskul_nama: enrollment.ekskul_nama,
     bulan,
-    tahun: new Date().getFullYear(),
+    tahun: Number(tahun) || paymentYearFor(bulan),
     nominal_bayar: amount,
     tanggal_bayar: tanggalBayar || now.slice(0, 10),
     keterangan: keterangan || null,

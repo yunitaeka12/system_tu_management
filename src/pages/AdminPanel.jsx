@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, BadgeCheck, Database, LayoutGrid, ShieldCheck, Trash2, UserCog } from 'lucide-react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Database,
+  LayoutGrid,
+  ShieldCheck,
+  SlidersHorizontal,
+  Trash2,
+  UserCog,
+} from 'lucide-react';
 import AdminOverview from '../components/admin/AdminOverview';
 import AdminUsers from '../components/admin/AdminUsers';
 import AdminPermissions from '../components/admin/AdminPermissions';
 import AdminBulkDelete from '../components/admin/AdminBulkDelete';
+import AdminBulkAdjust from '../components/admin/AdminBulkAdjust';
 import { useAuth } from '../context/AuthContext';
 import { cn, initials } from '../utils/helpers';
 
@@ -13,6 +23,7 @@ const TABS = [
   { key: 'ringkasan', label: 'Ringkasan', icon: LayoutGrid },
   { key: 'pengguna', label: 'Pengguna', icon: UserCog },
   { key: 'hak-akses', label: 'Hak Akses', icon: ShieldCheck },
+  { key: 'bulk-adjust', label: 'Bulk Adjust', icon: SlidersHorizontal },
   { key: 'hapus-massal', label: 'Hapus Massal', icon: Trash2 },
 ];
 
@@ -111,6 +122,7 @@ export default function AdminPanel() {
             {tab === 'ringkasan' && <AdminOverview />}
             {tab === 'pengguna' && <AdminUsers />}
             {tab === 'hak-akses' && <AdminPermissions />}
+            {tab === 'bulk-adjust' && <AdminBulkAdjust />}
             {tab === 'hapus-massal' && <AdminBulkDelete />}
           </motion.div>
         </AnimatePresence>

@@ -1,15 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, Award, CalendarDays, Info, Loader2, Save, Wallet } from 'lucide-react';
+import {
+  AlertTriangle,
+  Award,
+  CalendarDays,
+  Info,
+  Loader2,
+  Plus,
+  Save,
+  Wallet,
+  X,
+} from 'lucide-react';
 import FormField from '../FormField';
 import Select from '../Select';
 import PaymentStatusBadge from '../PaymentStatusBadge';
 import {
-  MONTHS,
+  PERIOD_MONTHS,
   buildMonthlyCoverage,
+  currentPeriodStart,
   getAnnualFee,
   getMonthlyFee,
   getPaymentStatus,
+  isOtherPayment,
+  monthsOfPeriod,
+  periodFromStart,
 } from '../../utils/paymentCalculator';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '../../utils/currency';
 import { cn } from '../../utils/helpers';
@@ -30,6 +44,13 @@ export default function PaymentForm({
   preview,
   payments = [],
   enrollments = [],
+  // Bulan yang sudah lunas karena Adjustment (pembukuan sebelumnya).
+  adjustedMonths = [],
+  // Periode tahun ajaran tempat pembayaran dicatat (tahun mulai, mis. 2025).
+  periodStart = currentPeriodStart(),
+  // Total tagihan seluruh periode (dari ringkasan siswa). Bila kosong, dipakai
+  // tagihan satu periode.
+  totalBilled = null,
   showEkskul = false,
   ekskulOptions = [],
   submitting = false,
@@ -37,8 +58,11 @@ export default function PaymentForm({
   onCancel,
   submitLabel = 'Simpan Pembayaran',
 }) {
-  const annualFee = getAnnualFee(student?.no_induk);
   const monthlyFee = getMonthlyFee(student?.no_induk);
+  const annualFee = Number(totalBilled) || getAnnualFee(student?.no_induk);
+  const period = periodFromStart(periodStart);
+  // Bulan mengikuti periode yang dipilih — labelnya ikut menyebut tahunnya.
+  const periodMonths = useMemo(() => monthsOfPeriod(periodStart), [periodStart]);
 
   const [bulan, setBulan] = useState(initialValues?.bulan ?? '');
   const [nominal, setNominal] = useState(
@@ -52,10 +76,15 @@ export default function PaymentForm({
   const [ekskulNominal, setEkskulNominal] = useState(
     initialValues?.ekskul_nominal ? String(initialValues.ekskul_nominal) : '',
   );
+  // Pembayaran lain-lain (opsional) — tidak mengurangi tagihan SPP.
+  const [showLain, setShowLain] = useState(false);
+  const [lainNominal, setLainNominal] = useState('');
+  const [lainKeterangan, setLainKeterangan] = useState('');
   const [error, setError] = useState('');
 
   const amount = parseCurrencyInput(nominal);
   const ekskulAmount = parseCurrencyInput(ekskulNominal);
+  const lainAmount = parseCurrencyInput(lainNominal);
   const selectedEkskul = ekskulOptions.find((item) => item.nama === ekskulNama) || null;
 
   // Pilih ekskul → nominal otomatis mengikuti biaya bulanannya.
@@ -76,13 +105,20 @@ export default function PaymentForm({
   const projectedRemaining = Math.max(annualFee - projectedTotal, 0);
 
   // Sebar pembayaran ke bulan secara berurutan (kelebihan menutup bulan berikutnya).
+  // Pembayaran lain-lain tidak dihitung sebagai pelunasan SPP.
   const existingPayments = useMemo(
-    () => payments.filter((payment) => payment.id !== excludePaymentId),
+    () =>
+      payments.filter(
+        (payment) => payment.id !== excludePaymentId && !isOtherPayment(payment),
+      ),
     [payments, excludePaymentId],
   );
   const coverage = useMemo(
-    () => buildMonthlyCoverage(existingPayments, monthlyFee),
-    [existingPayments, monthlyFee],
+    () =>
+      buildMonthlyCoverage(existingPayments, monthlyFee, null, adjustedMonths, {
+        monthOrder: PERIOD_MONTHS,
+      }),
+    [existingPayments, monthlyFee, adjustedMonths],
   );
   const projectedCoverage = useMemo(
     () =>
@@ -90,11 +126,13 @@ export default function PaymentForm({
         existingPayments,
         monthlyFee,
         bulan && amount > 0 ? { bulan, nominal: amount } : null,
+        adjustedMonths,
+        { monthOrder: PERIOD_MONTHS },
       ),
-    [existingPayments, monthlyFee, bulan, amount],
+    [existingPayments, monthlyFee, bulan, amount, adjustedMonths],
   );
 
-  const monthIndex = MONTHS.indexOf(bulan);
+  const monthIndex = PERIOD_MONTHS.indexOf(bulan);
   const monthCoverage = monthIndex >= 0 ? coverage[monthIndex] : null;
   const newlyCovered = useMemo(
     () =>
@@ -155,12 +193,19 @@ export default function PaymentForm({
     onSubmit({
       bulan,
       nominal: amount,
-      tahun: initialValues?.tahun ?? new Date().getFullYear(),
+      // Tahun diambil dari periode agar bulan Januari–Juni jatuh pada tahun
+      // yang benar (mis. Januari di periode 2025/2026 → 2026).
+      tahun:
+        initialValues?.tahun ??
+        periodMonths.find((item) => item.bulan === bulan)?.tahun ??
+        new Date().getFullYear(),
       tanggalBayar,
       keterangan,
       excludePaymentId,
       ekskulNama,
       ekskulNominal: ekskulNama ? ekskulAmount : 0,
+      lainNominal: lainAmount,
+      lainKeterangan,
     });
   };
 
@@ -192,7 +237,7 @@ export default function PaymentForm({
         <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-              Total Tagihan Tahunan
+              Total Tagihan
             </p>
             <p className="mt-0.5 text-sm font-bold text-slate-800">{formatCurrency(annualFee)}</p>
           </div>
@@ -201,6 +246,14 @@ export default function PaymentForm({
               Tagihan Bulanan
             </p>
             <p className="mt-0.5 text-sm font-bold text-slate-800">{formatCurrency(monthlyFee)}</p>
+          </div>
+          <div className="col-span-2 border-t border-slate-200 pt-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              Periode Tahun Ajaran
+            </p>
+            <p className="mt-0.5 text-sm font-bold text-slate-800">
+              {period ? period.display : '-'}
+            </p>
           </div>
         </div>
       </div>
@@ -219,9 +272,9 @@ export default function PaymentForm({
               className="input pl-10"
             >
               <option value="">Pilih Bulan</option>
-              {MONTHS.map((month) => (
-                <option key={month} value={month}>
-                  {month}
+              {periodMonths.map((item) => (
+                <option key={item.label} value={item.bulan}>
+                  {item.label}
                 </option>
               ))}
             </Select>
@@ -266,7 +319,7 @@ export default function PaymentForm({
                 onClick={() => setNominal(String(projectedRemaining))}
                 className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-primary-300 hover:text-primary-600"
               >
-                Lunasi sisa tahun ({formatCurrency(projectedRemaining)})
+                Lunasi seluruh sisa ({formatCurrency(projectedRemaining)})
               </button>
             )}
           </div>
@@ -303,6 +356,7 @@ export default function PaymentForm({
           <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
             <CalendarDays size={14} />
             Status Bulan {bulan}
+            {period ? <span className="font-medium normal-case">• {period.label}</span> : null}
           </p>
           <p
             className={cn(
@@ -404,6 +458,81 @@ export default function PaymentForm({
         </div>
       )}
 
+      {/* Pembayaran lain-lain — opsional, tidak mengurangi tagihan SPP */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Pembayaran Lain
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Untuk pembayaran di luar SPP (seragam, kegiatan, dll.) — tercatat di peta bulanan &
+              riwayat, tanpa mengurangi tagihan SPP.
+            </p>
+          </div>
+          {!showLain && (
+            <button
+              type="button"
+              onClick={() => setShowLain(true)}
+              className="btn-secondary btn-sm"
+            >
+              <Plus size={15} />
+              Pembayaran Lain
+            </button>
+          )}
+          {showLain && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowLain(false);
+                setLainNominal('');
+                setLainKeterangan('');
+              }}
+              className="btn-ghost btn-sm"
+            >
+              <X size={15} />
+              Hapus
+            </button>
+          )}
+        </div>
+
+        {showLain && (
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField
+              label="Nominal Pembayaran Lain"
+              htmlFor="lain_nominal"
+              hint={lainAmount > 0 ? formatCurrency(lainAmount) : 'Di luar tagihan SPP'}
+            >
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                  Rp
+                </span>
+                <input
+                  id="lain_nominal"
+                  type="text"
+                  inputMode="numeric"
+                  value={formatCurrencyInput(lainNominal)}
+                  onChange={(e) => setLainNominal(String(parseCurrencyInput(e.target.value)))}
+                  placeholder="0"
+                  className="input pl-10 font-semibold"
+                />
+              </div>
+            </FormField>
+
+            <FormField label="Keterangan Pembayaran" htmlFor="lain_keterangan">
+              <input
+                id="lain_keterangan"
+                type="text"
+                value={lainKeterangan}
+                onChange={(e) => setLainKeterangan(e.target.value)}
+                placeholder="mis. Seragam olahraga"
+                className="input"
+              />
+            </FormField>
+          </div>
+        )}
+      </div>
+
       {/* Peringatan */}
       <AnimatePresence>
         {duplicate?.hasDuplicate && (
@@ -456,9 +585,9 @@ export default function PaymentForm({
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { label: 'Total Dibayar', value: formatCurrency(projectedTotal) },
+              { label: 'Total Dibayar SPP', value: formatCurrency(projectedTotal) },
               { label: 'Sisa Tagihan', value: formatCurrency(projectedRemaining) },
-              { label: 'Tagihan', value: formatCurrency(annualFee) },
+              { label: 'Total Tagihan', value: formatCurrency(annualFee) },
             ].map((item) => (
               <div key={item.label}>
                 <p className="text-[11px] font-medium uppercase tracking-wide text-primary-600/80">

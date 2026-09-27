@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   KeyRound,
   LockOpen,
   Pencil,
@@ -18,6 +19,7 @@ import {
   DEFAULT_PASSWORD,
   ROLE_KEYS,
   ROLE_LABELS,
+  checkAdminService,
   createUser,
   deleteUser,
   listUsersWithStatus,
@@ -26,7 +28,7 @@ import {
   updateUser,
 } from '../../services/authService';
 import { confirmDialog, toast } from '../../lib/toast';
-import { isSupabaseAuthEnabled } from '../../lib/supabase';
+import { isSupabaseAuthEnabled, supabaseProjectRef } from '../../lib/supabase';
 import { formatDate } from '../../utils/helpers';
 import { cn } from '../../utils/helpers';
 
@@ -61,6 +63,17 @@ export default function AdminUsers() {
   const [passwordModal, setPasswordModal] = useState(null); // user
   const [newPassword, setNewPassword] = useState(DEFAULT_PASSWORD);
   const [saving, setSaving] = useState(false);
+  // null = sedang diperiksa, true/false = kesiapan Edge Function admin-users.
+  const [adminService, setAdminService] = useState(null);
+
+  const refreshAdminService = useCallback(async () => {
+    const result = await checkAdminService();
+    setAdminService(result.available);
+  }, []);
+
+  useEffect(() => {
+    refreshAdminService();
+  }, [refreshAdminService]);
 
   const filtered = users.filter((user) => {
     if (roleFilter && user.role !== roleFilter) return false;
@@ -111,12 +124,15 @@ export default function AdminUsers() {
       confirmText: 'Ya, hapus',
     });
     if (!confirmed) return;
-    const result = deleteUser(user.id, session?.user_id);
+    setSaving(true);
+    const result = await deleteUser(user.id, session?.user_id);
+    setSaving(false);
     if (!result.ok) {
       toast.error(result.error);
       return;
     }
-    toast.success('Pengguna berhasil dihapus.');
+    if (result.warning) toast.warning(result.warning);
+    else toast.success('Pengguna berhasil dihapus (termasuk akun login Supabase).');
   };
 
   const handleToggleActive = async (user) => {
@@ -153,12 +169,51 @@ export default function AdminUsers() {
       return;
     }
     if (result.warning) toast.warning(result.warning);
+    else if (result.createdAuth)
+      toast.success(`Akun login ${passwordModal.email} dibuat dan passwordnya diset.`);
     else toast.success(`Password ${passwordModal.name} direset. Akses login terbuka kembali.`);
     setPasswordModal(null);
   };
 
   return (
     <div className="space-y-5">
+      {/* Peringatan: akun login otomatis butuh Edge Function admin-users */}
+      {adminService === false && (
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-2.5">
+            <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-300" />
+            <div>
+              <p className="text-sm font-semibold text-amber-50">
+                Akun login otomatis belum aktif
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-amber-100/80">
+                Tambah Pengguna dan Reset Password <strong>tetap mencatat pengguna di aplikasi</strong>,
+                tetapi belum membuat akun di Supabase → Authentication → Users, sehingga pengguna baru
+                masih belum bisa masuk. Deploy Edge Function-nya satu kali:
+              </p>
+              <code className="mt-1.5 inline-block max-w-full overflow-x-auto rounded bg-black/30 px-2 py-1 text-[11px] text-amber-100">
+                npx supabase functions deploy admin-users --project-ref{' '}
+                {supabaseProjectRef || '<project-ref>'} --use-api
+              </code>
+              <p className="mt-1.5 text-xs text-amber-100/80">
+                Sementara itu, akun bisa ditambahkan manual di Supabase → Authentication → Users → Add
+                user (centang Auto Confirm).
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setAdminService(null);
+              refreshAdminService();
+            }}
+            className="shrink-0 rounded-lg border border-amber-400/40 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/20"
+          >
+            Cek lagi
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="relative lg:max-w-sm lg:flex-1">
@@ -361,8 +416,8 @@ export default function AdminUsers() {
                 <p className="mt-1.5 text-xs text-slate-500">
                   {isSupabaseAuthEnabled ? (
                     <>
-                      Login memakai Supabase Auth — kolom ini tidak dipakai. Buat akun login di
-                      Supabase → Authentication → Users dengan email di atas.
+                      Akun login Supabase dibuat otomatis dengan password ini (butuh Edge Function
+                      “admin-users” sudah di-deploy). Pengguna diminta menggantinya saat login.
                     </>
                   ) : (
                     <>
@@ -392,41 +447,36 @@ export default function AdminUsers() {
         open={Boolean(passwordModal)}
         onClose={() => setPasswordModal(null)}
         dark
-        title={isSupabaseAuthEnabled ? 'Buka Akses Login' : 'Reset Password'}
+        title="Reset Password"
         description={passwordModal ? `Akses login untuk ${passwordModal.email}` : ''}
         size="sm"
       >
         {passwordModal && (
           <form onSubmit={handleResetPassword} className="space-y-4">
-            {isSupabaseAuthEnabled ? (
-              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-xs leading-relaxed text-amber-200">
-                Penghitung salah password di browser ini akan dihapus. Password login sendiri diatur
-                di Supabase → Authentication → Users (ubah atau kirim ulang undangan dari sana).
+            <div>
+              <label htmlFor="reset-password" className="dark-label">
+                Password Baru
+              </label>
+              <input
+                id="reset-password"
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="dark-input font-mono"
+              />
+              <p className="mt-1.5 text-xs text-slate-500">
+                {isSupabaseAuthEnabled
+                  ? 'Password akun login Supabase akan diubah (butuh Edge Function “admin-users” sudah di-deploy). Penghitung salah password juga dihapus.'
+                  : 'Penghitung salah password juga dihapus sehingga akun dapat login kembali.'}
               </p>
-            ) : (
-              <div>
-                <label htmlFor="reset-password" className="dark-label">
-                  Password Baru
-                </label>
-                <input
-                  id="reset-password"
-                  type="text"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="dark-input font-mono"
-                />
-                <p className="mt-1.5 text-xs text-slate-500">
-                  Penghitung salah password juga dihapus sehingga akun dapat login kembali.
-                </p>
-              </div>
-            )}
+            </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setPasswordModal(null)} className="dark-btn-ghost">
                 Batalkan
               </button>
               <button type="submit" disabled={saving} className="dark-btn-primary">
                 <KeyRound size={15} />
-                {isSupabaseAuthEnabled ? 'Buka Akses' : 'Reset Password'}
+                Reset Password
               </button>
             </div>
           </form>

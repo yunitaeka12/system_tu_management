@@ -13,6 +13,13 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const isSupabaseConfigured = Boolean(URL && ANON_KEY);
 
 /**
+ * Project ref Supabase (diambil dari URL) — dipakai Admin Panel untuk
+ * menampilkan perintah deploy Edge Function yang siap salin-tempel.
+ */
+export const supabaseProjectRef =
+  String(URL ?? '').match(/^https?:\/\/([a-z0-9-]+)\.supabase\./i)?.[1] ?? '';
+
+/**
  * Login memakai Supabase Auth (bukan password lokal) bila env var tersedia.
  * Sesi disimpan Supabase sendiri di localStorage lalu divalidasi ulang saat
  * aplikasi dibuka (lihat restoreSession di services/authService).
@@ -76,4 +83,5 @@ export const TABLES = [
   'payments',
   'student_ekskul',
   'ekskul_payments',
+  'payment_adjustments',
 ];

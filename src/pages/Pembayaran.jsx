@@ -32,6 +32,34 @@ function EkskulPills({ names }) {
   );
 }
 
+const CURRENT_YEAR = new Date().getFullYear();
+
+/** Sel “SPP Terakhir”: bulan terakhir dibayar + lunas / masih kurang berapa. */
+function LastSppCell({ last }) {
+  if (!last) return <span className="text-xs text-slate-400">Belum bayar</span>;
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-800">
+        {last.bulan}
+        {last.tahun !== CURRENT_YEAR && (
+          <span className="ml-1 font-normal text-slate-500">{last.tahun}</span>
+        )}
+      </p>
+      {last.isFull ? (
+        <p className="mt-0.5 text-[11px] font-medium text-school-700">
+          Lunas
+          {last.adjusted ? ' (adjustment)' : ''}
+          {last.extraMonths > 0 ? ` • menutup s/d ${last.coveredThrough}` : ''}
+        </p>
+      ) : (
+        <p className="mt-0.5 text-[11px] font-medium text-amber-600">
+          kurang {formatCurrency(last.shortfall)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MiniStat({ label, value, tone = 'slate' }) {
   const tones = {
     slate: 'text-slate-800',
@@ -90,7 +118,11 @@ export default function Pembayaran() {
   const handleDelete = async (row) => {
     const confirmed = await confirmDialog({
       title: 'Hapus riwayat pembayaran?',
-      text: `Seluruh transaksi pembayaran ${row.nama_lengkap} (${row.no_induk}) sebanyak ${row.payment_count} transaksi akan dihapus dan sisa tagihan dihitung ulang. Data Buku Induk tetap aman.`,
+      text:
+        `Seluruh transaksi pembayaran ${row.nama_lengkap} (${row.no_induk}) sebanyak ${row.payment_count} transaksi akan dihapus dan sisa tagihan dihitung ulang. Data Buku Induk tetap aman.` +
+        (row.adjustment_total > 0
+          ? ' Data Adjustment tidak ikut terhapus — hapus dari halaman detail bila memang tidak diperlukan.'
+          : ''),
       confirmText: 'Ya, hapus',
     });
     if (!confirmed) return;
@@ -164,9 +196,21 @@ export default function Pembayaran() {
         sortable: true,
         align: 'right',
         render: (row) => (
-          <span className={cn('font-medium', row.total_paid > 0 ? 'text-school-700' : 'text-slate-400')}>
-            {formatCurrency(row.total_paid)}
-          </span>
+          <div>
+            <p
+              className={cn(
+                'font-medium',
+                row.total_paid > 0 ? 'text-school-700' : 'text-slate-400',
+              )}
+            >
+              {formatCurrency(row.total_paid)}
+            </p>
+            {row.adjustment_total > 0 && (
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                termasuk adjustment {formatCurrency(row.adjustment_total)}
+              </p>
+            )}
+          </div>
         ),
       },
       {
@@ -179,6 +223,12 @@ export default function Pembayaran() {
             {formatCurrency(row.remaining)}
           </span>
         ),
+      },
+      {
+        key: 'last_spp_position',
+        header: 'SPP Terakhir',
+        sortable: true,
+        render: (row) => <LastSppCell last={row.last_spp} />,
       },
       {
         key: 'status',
@@ -431,7 +481,37 @@ export default function Pembayaran() {
                   <span className="text-xs text-slate-500">
                     Sisa <strong className="text-red-600">{formatCurrency(row.remaining)}</strong>
                   </span>
+                  {row.adjustment_total > 0 && (
+                    <span className="badge bg-amber-50 text-amber-700 ring-1 ring-amber-100">
+                      adjustment {formatCurrency(row.adjustment_total)}
+                    </span>
+                  )}
                 </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {row.last_spp ? (
+                    <>
+                      SPP terakhir:{' '}
+                      <strong className="font-semibold text-slate-700">
+                        {row.last_spp.bulan}
+                        {row.last_spp.tahun !== CURRENT_YEAR ? ` ${row.last_spp.tahun}` : ''}
+                      </strong>{' '}
+                      {row.last_spp.isFull ? (
+                        <span className="text-school-700">
+                          • lunas
+                          {row.last_spp.extraMonths > 0
+                            ? ` (menutup s/d ${row.last_spp.coveredThrough})`
+                            : ''}
+                        </span>
+                      ) : (
+                        <span className="text-amber-600">
+                          • kurang {formatCurrency(row.last_spp.shortfall)}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    'SPP terakhir: belum bayar'
+                  )}
+                </p>
               </div>
               <ArrowRight size={16} className="mt-1 shrink-0 text-slate-300" />
             </Link>

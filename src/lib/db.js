@@ -13,7 +13,8 @@
  *     otomatis berjalan penuh dalam mode lokal.
  *
  * Bentuk tabel sengaja mengikuti skema PostgreSQL pada `supabase/schema.sql`
- * (students, users, payments, academic_years, student_ekskul, ekskul_payments).
+ * (students, users, payments, academic_years, student_ekskul, ekskul_payments,
+ *  payment_adjustments).
  */
 import seedData from '../data/students.seed.json';
 import { uid } from '../utils/helpers';
@@ -129,6 +130,7 @@ function buildInitialDB() {
     payments: [],
     student_ekskul: [],
     ekskul_payments: [],
+    payment_adjustments: [],
     users: [],
     meta: {
       last_student_import: null,
@@ -146,6 +148,7 @@ function withMissingTables(db) {
     payments: db.payments || [],
     student_ekskul: db.student_ekskul || [],
     ekskul_payments: db.ekskul_payments || [],
+    payment_adjustments: db.payment_adjustments || [],
     users: db.users || [],
     meta: db.meta || { last_student_import: null, counters: {} },
   };
@@ -248,6 +251,7 @@ export function resetDB({ keepPayments = false } = {}) {
   if (keepPayments) {
     fresh.payments = current.payments;
     fresh.ekskul_payments = current.ekskul_payments;
+    fresh.payment_adjustments = current.payment_adjustments;
     fresh.student_ekskul = current.student_ekskul;
     fresh.users = current.users;
   }
@@ -263,6 +267,9 @@ export function resetDB({ keepPayments = false } = {}) {
 export function clearPayments() {
   commit((draft) => {
     draft.payments = [];
+    // Adjustment ikut dihapus — kalau tidak, status “lunas” akan tertinggal
+    // padahal tagihannya sudah dikosongkan.
+    draft.payment_adjustments = [];
   });
 }
 
@@ -507,14 +514,21 @@ export async function initDB() {
       const remoteStudents = await fetchAll('students');
 
       if (remoteStudents.length > 0) {
-        const [academic_years, payments, student_ekskul, ekskul_payments, metaRows] =
-          await Promise.all([
-            fetchAll('academic_years'),
-            fetchAll('payments'),
-            fetchAll('student_ekskul'),
-            fetchAll('ekskul_payments'),
-            fetchAll('app_meta'),
-          ]);
+        const [
+          academic_years,
+          payments,
+          student_ekskul,
+          ekskul_payments,
+          payment_adjustments,
+          metaRows,
+        ] = await Promise.all([
+          fetchAll('academic_years'),
+          fetchAll('payments'),
+          fetchAll('student_ekskul'),
+          fetchAll('ekskul_payments'),
+          fetchAll('payment_adjustments'),
+          fetchAll('app_meta'),
+        ]);
 
         const local = getDB();
         cache = withMissingTables({
@@ -526,6 +540,7 @@ export async function initDB() {
           payments,
           student_ekskul,
           ekskul_payments,
+          payment_adjustments,
           meta: metaRows.find((row) => row.key === 'meta')?.value || local.meta,
         });
         persist(cache);

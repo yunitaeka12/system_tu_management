@@ -10,9 +10,10 @@ dan panel administrator. Dibangun dengan React + Vite, data tersimpan di
 | --- | --- |
 | **Dashboard** | Ringkasan tagihan, pembayaran, piutang, chart per bulan, insight per kelas |
 | **Buku Induk** | Master data 1.200+ siswa, pencarian, filter kelas/rombel/tahun ajaran, import & export Excel, serta kelola ekskul siswa + riwayat pembayarannya per tanggal |
-| **Pembayaran** | Pencatatan SPP per bulan — sekaligus bisa memilih ekskul & mencatat bayar ekskul (opsional), peta warna bulanan gabungan SPP+ekskul (merah/kuning/hijau), riwayat gabungan + pagination |
+| **Pembayaran** | Pencatatan SPP per bulan — sekaligus bisa memilih ekskul & mencatat bayar ekskul (opsional) dan **Pembayaran Lain** (nominal + keterangan), peta warna bulanan gabungan SPP+ekskul (merah/kuning/hijau) dengan **filter periode tahun ajaran (Juli–Juni)** dan keterangan tunggakan per periode, kolom **SPP Terakhir**, **Adjustment** untuk pembayaran yang sudah tercatat di pembukuan sebelumnya, riwayat gabungan + pagination |
+| **Report Pembayaran** | Rekap seluruh siswa: total tagihan, sudah dibayar, sisa tagihan, tunggakan per periode tahun ajaran, plus riwayat bayar tiap siswa; filter tahun ajaran/kelas/status dengan pilihan tampil semua data atau per halaman, dan **Export Excel** (sheet rekap + riwayat) |
 | **Pengaturan** | Ubah tarif SPP per angkatan dan biaya tiap ekskul (plus tambah/hapus angkatan & ekskul) |
-| **Admin Panel** | Kelola pengguna, hak akses per role & per pengguna, hapus massal per kelas/tahun ajaran (tema gelap) |
+| **Admin Panel** | Kelola pengguna, hak akses per role & per pengguna, **Bulk Adjust** (tandai bulan/periode yang sudah dibayar di pembukuan lama untuk satu angkatan/kelas sekaligus), hapus massal per kelas/tahun ajaran (tema gelap) |
 | **Keamanan** | Login 3x salah → akun terkunci, popup ganti password, verifikasi password tiap 3 jam, auto logout 1 menit |
 
 ## Menjalankan
@@ -65,9 +66,11 @@ Kalau env var kosong, login kembali ke **mode lokal** (hash SHA-256 di browser).
    > **Baris di tabel `users` tidak sama dengan akun login.** Baris di tabel
    > `users` (role & hak akses) dibuat otomatis oleh aplikasi lewat `SEED_USERS`
    > dan Admin Panel, sedangkan akun di **Authentication → Users** (password +
-   > authenticator) hanya ada bila Anda menambahkannya sendiri. Aplikasi tidak
-   > bisa membuat akun login otomatis karena itu butuh `service_role` key, dan
-   > kunci tersebut tidak boleh ditaruh di bundle browser.
+   > authenticator) dibuat tersendiri. Sejak ada Edge Function `admin-users`
+   > (lihat [1d](#1d-buat-akun-login-otomatis-dari-admin-panel-edge-function)),
+   > menambah pengguna di Admin Panel **otomatis membuatkan akun login-nya**.
+   > Tanpa fungsi itu, akun tetap dibuat manual di **Authentication → Users**.
+   > Kunci `service_role` tidak pernah dipakai di browser — hanya di fungsi server.
    >
    > Gejala bila salah satu belum dibuat:
    >
@@ -122,6 +125,169 @@ satu langkah (mode lokal).
 > ⚠️ RLS pada `supabase/schema.sql` masih **permisif**, jadi anon key tetap bisa
 > dipakai membaca data langsung lewat API. Setelah login pindah ke Supabase Auth,
 > perketat policy-nya (mis. `using ((auth.jwt() ->> 'aal') = 'aal2')` untuk MFA).
+
+### 1d. Buat akun login otomatis dari Admin Panel (Edge Function)
+
+Supabase hanya mengizinkan pembuatan akun Auth lewat **`service_role` key**, dan
+kunci itu tidak boleh ditaruh di bundle browser. Karena itu logika pembuatannya
+dipindah ke satu **Edge Function** (`supabase/functions/admin-users`) yang
+berjalan di server Supabase. **Login tetap memakai Supabase Auth persis seperti
+sebelumnya** (email + password, lalu kode authenticator/TOTP) — fungsi ini hanya
+membuat/menghapus/mengubah password akun, bukan menggantikan autentikasinya.
+
+Saat fungsi ini aktif, dari **Admin Panel → Pengguna**:
+
+- **Tambah Pengguna** → akun Supabase Auth dibuat otomatis memakai password yang
+  diisi (email langsung terkonfirmasi).
+- **Reset Password** → password akun Supabase Auth ikut diubah, penghitung salah
+  password dibuka. Bila baris pengguna itu belum punya akun Auth (mis. dibuat
+  sebelum fungsi ini di-deploy), akunnya **dibuat sekaligus** — jadi tombol ini
+  juga merapikan akun yang tertinggal.
+- **Hapus Pengguna** → akun Supabase Auth ikut dihapus.
+
+Deploy sekali saja:
+
+```bash
+npx supabase login
+npx supabase link --project-ref <project-ref-anda>
+npx supabase functions deploy admin-users
+```
+
+`SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` otomatis tersedia di dalam Edge
+Function, jadi tidak perlu mengatur secret mana pun. Fungsi memverifikasi bahwa
+pemanggilnya benar-benar **Administrator** (dicek dari tabel `users`) sebelum
+melakukan aksi.
+
+Bila fungsi belum di-deploy, aplikasi tetap berjalan: baris pengguna dibuat,
+tetapi akun login harus ditambahkan manual di **Authentication → Users**. Admin
+Panel menampilkan **banner peringatan “Akun login otomatis belum aktif”** beserta
+perintah deploy-nya (tombol **Cek lagi** untuk memeriksa ulang setelah deploy) —
+sebelumnya kegagalan ini hanya berupa toast singkat sehingga mudah terlewat.
+
+Cara memeriksa cepat dari terminal apakah fungsinya sudah jalan:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+  "$VITE_SUPABASE_URL/functions/v1/admin-users" \
+  -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY" \
+  -H "Content-Type: application/json" -d '{"action":"status"}'
+```
+
+`404` / `NOT_FOUND` = belum di-deploy; `401` / `403` = sudah ada (menolak karena
+bukan sesi Administrator).
+
+### 1e. Adjustment — pembayaran yang sudah tercatat di pembukuan sebelumnya
+
+Di halaman **Detail Pembayaran** ada tombol **Adjustment** (butuh hak akses
+“Ubah pembayaran”). Fungsinya mencatat pembayaran yang **sudah masuk dan
+tercatat di pembukuan sebelumnya** (di luar aplikasi), misalnya data pindahan
+dari buku besar lama.
+
+Isi formulirnya:
+
+- **Total Adjustment** — nominal yang sudah dibayar, mis. `2.000.000`.
+- **Keterangan** — otomatis terisi *“Sudah bayar dan tercatat di pembukuan
+  sebelumnya”*, tetap bisa diubah.
+- **Bulan yang dicentang** — bulan-bulan yang sudah dibayar dengan nominal itu.
+- **Periode Tahun Ajaran** — menentukan periode peta bulanan mana yang berubah
+  (mis. “Juli 2025 – Juni 2026”).
+
+### 1e.1 Bulk Adjust — adjustment massal dari Admin Panel
+
+Tab **Bulk Adjust** di Admin Panel menandai bulan yang **sudah dibayar di
+pembukuan sebelumnya** untuk banyak siswa sekaligus:
+
+1. Pilih **Tahun Ajaran** (angkatan, dari 4 digit awal No Induk) dan/atau
+   **Kelas** — minimal salah satu.
+2. Pilih **Periode** tahun ajaran (mis. *Juli 2025 – Juni 2026*) dan centang
+   **bulan** yang sudah dibayar (bisa “Pilih semua”).
+3. Panel **Perkiraan Dampak** menampilkan jumlah siswa terdampak dan total
+   tagihan yang berkurang sebelum diterapkan.
+
+Nominal dihitung otomatis: **jumlah bulan × tarif SPP angkatan siswa**, jadi
+tagihan setiap siswa pada periode tersebut langsung berkurang. Adjustment yang
+sudah ada pada periode yang sama akan **digabung** (bulan disatukan, nominal
+dihitung ulang) sehingga aman dijalankan berulang.
+
+### 1e.2 Pembayaran Lain (di luar SPP)
+
+Di form **Pembayaran** ada tombol **+ Pembayaran Lain** yang memunculkan dua
+kolom: **Nominal** dan **Keterangan Pembayaran** (mis. “Seragam olahraga”).
+Pembayaran ini:
+
+- **tidak mengurangi tagihan SPP** (tidak mempengaruhi sisa tagihan maupun
+  status lunas),
+- tetap tercatat di **peta bulanan** (baris keterangannya muncul pada bulan
+  transaksi) dan di **riwayat transaksi** dengan badge *Pembayaran Lain*,
+- disimpan di tabel `payments` dengan kolom **`jenis = 'lain'`**.
+
+Efeknya:
+
+- **Sisa tagihan berkurang** sebesar nominal adjustment (dihitung sebagai sudah
+  dibayar — “Total Dibayar” dan dashboard ikut menyesuaikan, dengan catatan
+  `termasuk adjustment Rp …`).
+- **Bulan yang dicentang langsung hijau (lunas)** pada Peta Bulanan, tanpa
+  transaksi baru — termasuk ekskul bulan itu, karena dianggap sudah selesai di
+  pembukuan lama.
+- Pada riwayat muncul satu baris ber-badge **Adjustment**, dan keterangannya
+  tampil di kartu **Adjustment Tagihan** pada halaman detail.
+- Kolom **SPP Terakhir** di tabel Pembayaran ikut menampilkan `(adjustment)`
+  bila bulan terakhirnya lunas karena adjustment.
+
+Data disimpan di tabel `payment_adjustments`, dan penanda pembayaran lain-lain
+memakai kolom baru `payments.jenis`. Keduanya **baru** — jalankan ulang
+[`supabase/schema.sql`](supabase/schema.sql) di **SQL Editor** (aman dijalankan
+berulang) agar tabel & kolomnya dibuat di Supabase. Tanpa itu fitur tetap bisa
+dicoba di penyimpanan lokal, tetapi hasilnya gagal terkirim ke Supabase.
+
+### 1g. Report Pembayaran
+
+Menu **Report Pembayaran** (sidebar, butuh hak akses “Lihat pembayaran”)
+menampilkan satu baris per siswa dengan kolom: No Induk, NISN, nama, kelas,
+tahun ajaran (angkatan), total tagihan, sudah dibayar, sisa tagihan, dan status.
+
+- Filter **Tahun Ajaran** (angkatan), **Kelas**, **Status**, dan pencarian nama
+  / No Induk / NISN.
+- Pilihan tampilan: **10/25/50/100 data per halaman** atau **Semua data**.
+- Klik ikon panah pada baris untuk melihat **Tagihan per Periode Tahun Ajaran**
+  (berapa yang sudah dibayar, berapa bulan & nominal tunggakannya) dan
+  **History Bayar** siswa tersebut (SPP, ekskul, pembayaran lain, adjustment).
+- Tombol **Export Excel** mengunduh dua sheet: *Rekap Pembayaran* (termasuk
+  kolom “Tunggakan per Periode” dan “Bulan Tunggakan”) dan *Riwayat Pembayaran*.
+
+### 1f. Periode tahun ajaran (Juli–Juni) pada Peta Bulanan
+
+Peta Bulanan dan riwayat pembayaran **tidak lagi memakai tahun kalender**,
+melainkan **periode tahun ajaran Juli–Juni** yang diturunkan dari No Induk
+(4 digit awal), mis. `25261001` → **Juli 2025 – Juni 2026**.
+
+- Dropdown periode memuat periode No Induk sampai **periode berjalan** — pada
+  September 2026 siswa No Induk `2526` mendapat dua pilihan:
+  *Juli 2026 – Juni 2027* (periode berjalan, dipilih otomatis) dan
+  *Juli 2025 – Juni 2026*.
+- Nama bulan di peta ikut menyesuaikan tahunnya: *Juli 2025, Agustus 2025, …,
+  Juni 2026*, dan aliran kelebihan bayar dihitung urut Juli → Juni.
+- Transaksi disaring per periode (bulan + tahun), jadi pembayaran Juli 2025 dan
+  Juli 2026 tidak saling bercampur. Hal yang sama berlaku untuk pembayaran
+  ekskul dan adjustment.
+- Kartu **Total Tagihan/Sudah Dibayar/Sisa Tagihan/Status** menghitung tagihan
+  periode berjalan, dengan keterangan periode pada kartunya.
+- **Tagihan menumpuk semua periode**: sejak periode No Induk sampai periode
+  berjalan. Siswa No Induk `2526` pada 2026/2027 ditagih untuk periode
+  2025/2026 **dan** 2026/2027 (2 × Rp 3.240.000); periode lama yang belum
+  dibayar ikut terhitung sebagai tunggakan — itulah yang dituntaskan lewat
+  **Bulk Adjust** / Adjustment saat datanya memang sudah dibayar di buku lama.
+- Kartu **Total Tagihan/Sudah Dibayar/Sisa Tagihan/Status** menampilkan jumlah
+  periode yang dihitung; kartu **Sisa Tagihan** menyebut rentang periodenya dan
+  jumlah bulan + nominal tunggakan.
+- Panel **Tagihan per Periode** menampilkan satu baris per periode tahun ajaran
+  (mis. *Periode Juli 2025 – Juni 2026 → 12 bulan • Rp 3.240.000*, *Periode
+  Juli 2026 – Juni 2027 → 11 bulan • Rp 2.965.000*) beserta status lunas /
+  belum lunas — tanpa daftar per bulan yang panjang.
+- Pembayaran “lain-lain” tidak ikut mengurangi SPP, hanya menambah info
+  pembayaran lain pada kartu & report.
+- Form pembayaran & adjustment memakai bulan berlabel tahun, dan tahun yang
+  disimpan mengikuti periode tersebut (Januari–Juni masuk tahun berikutnya).
 
 ### 2. Import data Buku Induk (opsional)
 

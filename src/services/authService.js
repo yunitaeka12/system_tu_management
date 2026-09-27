@@ -11,6 +11,62 @@ import { supabase, isSupabaseAuthEnabled } from '../lib/supabase';
 
 const SESSION_KEY = 'assalam.tu.session';
 
+/** Edge Function yang menangani akun login Supabase (memakai service_role). */
+const ADMIN_USERS_FUNCTION = 'admin-users';
+
+/**
+ * Panggil Edge Function `admin-users` untuk membuat/menghapus/mengubah password
+ * akun login Supabase Auth. `unavailable` true bila Supabase belum dikonfigurasi
+ * atau fungsinya belum di-deploy, sehingga pemanggil bisa memakai jalur manual
+ * (buat akun lewat dashboard Supabase).
+ */
+async function callAdminUsers(payload) {
+  if (!isSupabaseAuthEnabled) return { ok: false, unavailable: true };
+  try {
+    const { data, error } = await supabase.functions.invoke(ADMIN_USERS_FUNCTION, {
+      body: payload,
+    });
+    if (error) {
+      let message = error.message || 'Gagal memanggil layanan admin.';
+      let status;
+      try {
+        status = error.context?.status;
+        const body = await error.context?.json?.();
+        if (body?.error) message = body.error;
+      } catch {
+        /* biarkan pesan bawaan */
+      }
+      return {
+        ok: false,
+        unavailable: status === 404 || /not found|failed to (send|fetch)/i.test(message),
+        error: message,
+      };
+    }
+    if (!data?.ok) return { ok: false, error: data?.error || 'Aksi admin gagal diproses.' };
+    return {
+      ok: true,
+      auth_user_id: data.auth_user_id ?? null,
+      skipped: data.skipped,
+      created: data.created,
+    };
+  } catch (error) {
+    return { ok: false, unavailable: true, error: error?.message };
+  }
+}
+/**
+ * Cek kesiapan layanan akun login otomatis (Edge Function `admin-users`).
+ * Dipakai indikator di Admin Panel supaya kegagalan tidak terlihat seperti sukses.
+ */
+export async function checkAdminService() {
+  if (!isSupabaseAuthEnabled) {
+    return { available: false, error: 'Supabase belum dikonfigurasi (VITE_SUPABASE_URL kosong).' };
+  }
+  const result = await callAdminUsers({ action: 'status' });
+  if (result.ok) return { available: true };
+  return { available: false, error: result.error };
+}
+
+
 export const ROLES = {
   ADMINISTRATOR: 'administrator',
   TU: 'tu',
@@ -998,6 +1054,23 @@ export async function createUser({ name, email, role, password, permissions }) {
     return { ok: false, error: `Email ${normalizedEmail} sudah terdaftar.` };
   }
 
+  // Buat akun login Supabase Auth lebih dulu (bila layanan admin tersedia).
+  let authUserId = null;
+  let warning;
+  if (isSupabaseAuthEnabled) {
+    const auth = await callAdminUsers({ action: 'create', email: normalizedEmail, password });
+    if (auth.ok) {
+      authUserId = auth.auth_user_id ?? null;
+    } else if (auth.unavailable) {
+      warning =
+        `Akun login Supabase belum dibuat otomatis. Deploy Edge Function “admin-users” ` +
+        `(supabase functions deploy admin-users), atau tambahkan user ${normalizedEmail} di ` +
+        'Supabase → Authentication → Users agar bisa masuk.';
+    } else {
+      return { ok: false, error: auth.error || 'Gagal membuat akun login Supabase.' };
+    }
+  }
+
   const user = {
     id: uid('usr'),
     name: name.trim(),
@@ -1007,6 +1080,8 @@ export async function createUser({ name, email, role, password, permissions }) {
     password_hash: isSupabaseAuthEnabled ? '' : await hashPassword(password),
     must_change_password: true,
     is_active: true,
+    auth_user_id: authUserId,
+    auth_provider: 'email',
     permission_overrides: permissions && Object.keys(permissions).length ? permissions : null,
     created_at: new Date().toISOString(),
     last_login_at: null,
@@ -1015,13 +1090,7 @@ export async function createUser({ name, email, role, password, permissions }) {
   commit((draft) => {
     draft.users = [...(draft.users || []), user];
   });
-  return {
-    ok: true,
-    user,
-    warning: isSupabaseAuthEnabled
-      ? `Akun login Supabase belum dibuat. Tambahkan user dengan email ${normalizedEmail} di Supabase → Authentication → Users agar bisa masuk.`
-      : undefined,
-  };
+  return { ok: true, user, warning };
 }
 
 export function updateUser(id, payload) {
@@ -1056,19 +1125,38 @@ export function updateUser(id, payload) {
 export async function resetUserPassword(id, newPassword = DEFAULT_PASSWORD) {
   const current = getUser(id);
   if (!current) return { ok: false, error: 'Pengguna tidak ditemukan.' };
+  if (String(newPassword).length < 6) return { ok: false, error: 'Password minimal 6 karakter.' };
 
   if (isSupabaseAuthEnabled) {
-    // Password dikelola Supabase Auth, jadi hanya penghitung salah password
-    // (yang tersimpan di browser ini) yang bisa dibuka dari aplikasi.
+    // Password dikelola Supabase Auth — diubah lewat Edge Function admin-users.
+    const auth = await callAdminUsers({
+      action: 'update_password',
+      email: current.email,
+      auth_user_id: current.auth_user_id,
+      password: newPassword,
+    });
     resetLoginAttempts(current.email);
-    return {
-      ok: true,
-      warning:
-        'Password login diatur Supabase Auth. Ubah password akun ini di Supabase → Authentication → Users.',
-    };
+    if (auth.ok) {
+      // Akun login bisa baru dibuat oleh Edge Function (baris pengguna lama yang
+      // belum punya akun Supabase Auth) — simpan id-nya agar tautan tetap utuh.
+      if (auth.auth_user_id && auth.auth_user_id !== current.auth_user_id) {
+        commit((draft) => {
+          const target = (draft.users || []).find((user) => user.id === id);
+          if (target) target.auth_user_id = auth.auth_user_id;
+        });
+      }
+      return { ok: true, passwordSet: true, createdAuth: Boolean(auth.created) };
+    }
+    if (auth.unavailable) {
+      return {
+        ok: true,
+        warning:
+          'Penghitung salah password sudah dibuka. Password login diatur Supabase Auth — ubah di ' +
+          'Supabase → Authentication → Users, atau deploy Edge Function “admin-users”.',
+      };
+    }
+    return { ok: false, error: auth.error || 'Gagal mengubah password.' };
   }
-
-  if (String(newPassword).length < 6) return { ok: false, error: 'Password minimal 6 karakter.' };
 
   const password_hash = await hashPassword(newPassword);
   commit((draft) => {
@@ -1104,7 +1192,7 @@ export function setUserActive(id, active) {
   return { ok: true };
 }
 
-export function deleteUser(id, currentUserId) {
+export async function deleteUser(id, currentUserId) {
   const current = getUser(id);
   if (!current) return { ok: false, error: 'Pengguna tidak ditemukan.' };
   if (id === currentUserId) {
@@ -1117,10 +1205,27 @@ export function deleteUser(id, currentUserId) {
     }
   }
 
+  // Hapus juga akun login Supabase Auth (bila layanan admin tersedia).
+  let warning;
+  if (isSupabaseAuthEnabled) {
+    const auth = await callAdminUsers({
+      action: 'delete',
+      email: current.email,
+      auth_user_id: current.auth_user_id,
+    });
+    if (auth.unavailable) {
+      warning =
+        'Pengguna dihapus dari aplikasi, tetapi akun login Supabase tidak dihapus otomatis. ' +
+        'Hapus manual di Supabase → Authentication → Users, atau deploy Edge Function “admin-users”.';
+    } else if (!auth.ok) {
+      warning = `Pengguna dihapus dari aplikasi, tetapi akun login Supabase gagal dihapus: ${auth.error}`;
+    }
+  }
+
   commit((draft) => {
     draft.users = (draft.users || []).filter((user) => user.id !== id);
   });
-  return { ok: true };
+  return { ok: true, warning };
 }
 
 /** Ringkasan jumlah pengguna per role untuk dashboard admin. */

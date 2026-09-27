@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
 import Logo from './Logo';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/buku-induk', label: 'Buku Induk', icon: BookOpen },
   { to: '/pembayaran', label: 'Pembayaran', icon: CreditCard },
+  { to: '/report', label: 'Report Pembayaran', icon: FileSpreadsheet, permission: 'payment.view' },
 ];
 
 function NavItem({ item, collapsed, onNavigate }) {
@@ -71,6 +73,7 @@ function SidebarContent({
   roleLabel,
   isAdmin,
   canSettings,
+  navItems = NAV_ITEMS,
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -107,7 +110,7 @@ function SidebarContent({
             Menu Utama
           </p>
         )}
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <NavItem key={item.to} item={item} collapsed={collapsed} onNavigate={onNavigate} />
         ))}
 
@@ -174,6 +177,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
   const { user, roleLabel, logout, isAdministrator, can } = useAuth();
   const canSettings = can('settings.manage');
   const navigate = useNavigate();
+  const navItems = NAV_ITEMS.filter((item) => !item.permission || can(item.permission));
 
   const handleLogout = async () => {
     const confirmed = await confirmDialog({
@@ -204,6 +208,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
           roleLabel={roleLabel}
           isAdmin={isAdministrator}
           canSettings={canSettings}
+          navItems={navItems}
         />
       </motion.aside>
 
@@ -242,6 +247,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
                 roleLabel={roleLabel}
                 isAdmin={isAdministrator}
                 canSettings={canSettings}
+                navItems={navItems}
               />
             </motion.aside>
           </>

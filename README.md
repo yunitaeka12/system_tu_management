@@ -59,8 +59,23 @@ Kalau env var kosong, login kembali ke **mode lokal** (hash SHA-256 di browser).
    Administrator, bukan pendaftaran sendiri) dan set minimal password 8 karakter.
 4. **Authentication → Users → Add user** untuk tiap pengguna. Emailnya **harus
    sama persis** dengan baris di tabel `users` (mis. `admin@assalam.sch.id`,
-   `yunitaeka12@gmail.com`) supaya role & hak aksesnya ketemu. Kolom
-   `auth_user_id` terisi otomatis saat login pertama berhasil.
+   `yunitaeka124@gmail.com`) supaya role & hak aksesnya ketemu. Centang **Auto
+   Confirm User**. Kolom `auth_user_id` terisi otomatis saat login pertama
+   berhasil.
+
+   > **Baris di tabel `users` tidak sama dengan akun login.** Baris di tabel
+   > `users` (role & hak akses) dibuat otomatis oleh aplikasi lewat `SEED_USERS`
+   > dan Admin Panel, sedangkan akun di **Authentication → Users** (password +
+   > authenticator) hanya ada bila Anda menambahkannya sendiri. Aplikasi tidak
+   > bisa membuat akun login otomatis karena itu butuh `service_role` key, dan
+   > kunci tersebut tidak boleh ditaruh di bundle browser.
+   >
+   > Gejala bila salah satu belum dibuat:
+   >
+   > - Ada di `users` tapi belum ada di Authentication → login gagal dengan
+   >   *"Invalid login credentials"*.
+   > - Ada di Authentication tapi belum ada di `users` → login berhasil tetapi
+   >   muncul *"Akun login ini belum terdaftar di aplikasi."*
 5. Menambah user baru: buat dulu di **Admin Panel** (nama, email, role), lalu
    buat akun login-nya di Supabase dengan email yang sama.
 6. Reset/lupa password: dari **Supabase → Authentication → Users**, bukan lewat
@@ -155,13 +170,24 @@ Repo ini juga siap untuk **Vercel** (`vercel.json`) dan **Cloudflare Pages**
 
 ## Akun bawaan
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Administrator | `admin@assalam.sch.id` | `default123` |
-| Tata Usaha | `yunitaeka124@gmail.com` | `default123` |
+Baris berikut dibuat **otomatis** oleh aplikasi di tabel `users` (role & hak
+akses) saat aplikasi pertama dibuka:
+
+| Role | Email |
+| --- | --- |
+| Administrator | `admin@assalam.sch.id` |
+| Tata Usaha | `yunitaeka124@gmail.com` |
+
+Kolom password tidak dicantumkan karena bergantung pada mode login:
+
+- **Mode lokal** (env var Supabase kosong): password awal `default123`.
+- **Supabase Auth**: baris di atas **bukan akun login** — passwordnya belum ada.
+  Buat akunnya lebih dulu di **Supabase → Authentication → Users → Add user**
+  dengan email yang sama persis, lalu login dua langkah (password + TOTP).
 
 Pengguna akan diminta mengganti password saat login pertama. Jika lupa password
-atau akun terkunci karena 3 kali salah, buka **Admin Panel → Pengguna → Reset**.
+atau akun terkunci karena 3 kali salah, buka **Admin Panel → Pengguna → Reset**
+(mode lokal) atau **Supabase → Authentication → Users** (Supabase Auth).
 
 ## Struktur
 

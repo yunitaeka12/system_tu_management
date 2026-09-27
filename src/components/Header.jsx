@@ -35,7 +35,7 @@ function useBreadcrumb() {
     crumbs.push({ label, to });
   });
 
-  return crumbs;
+  return { crumbs, canViewDashboard };
 }
 
 function UserMenu() {
@@ -127,7 +127,7 @@ function UserMenu() {
 }
 
 export default function Header({ onOpenMobile }) {
-  const crumbs = useBreadcrumb();
+  const { crumbs, canViewDashboard } = useBreadcrumb();
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">

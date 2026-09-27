@@ -12,9 +12,23 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(URL && ANON_KEY);
 
+/**
+ * Login memakai Supabase Auth (bukan password lokal) bila env var tersedia.
+ * Sesi disimpan Supabase sendiri di localStorage lalu divalidasi ulang saat
+ * aplikasi dibuka (lihat restoreSession di services/authService).
+ */
+export const isSupabaseAuthEnabled = isSupabaseConfigured;
+
 export const supabase = isSupabaseConfigured
   ? createClient(URL, ANON_KEY, {
-      auth: { persistSession: false },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        // Login Microsoft (Azure) kembali ke aplikasi lewat URL — sesinya
+        // diambil otomatis dari parameter yang dikirim Supabase.
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
       realtime: { params: { eventsPerSecond: 2 } },
     })
   : null;

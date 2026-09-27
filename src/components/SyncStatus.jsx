@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CloudOff, CloudUpload, Cloud, RefreshCw } from 'lucide-react';
 import { getSyncState, subscribeSync } from '../lib/supabase';
 import { pushAll } from '../lib/db';
+import { toast } from '../lib/toast';
 import { cn } from '../utils/helpers';
 
 const CONFIG = {
@@ -45,10 +46,20 @@ export default function SyncStatus({ className }) {
   const config = CONFIG[state.status] ?? CONFIG.idle;
   const Icon = config.icon;
 
+  /** Saat gagal: coba kirim ulang, dan tampilkan pesan error bila masih gagal. */
+  const handleClick = async () => {
+    if (state.status !== 'error') return;
+    const result = await pushAll({ manual: true });
+    const next = getSyncState();
+    if (!result.ok || next.status === 'error') {
+      toast.error(next.lastError || 'Gagal menyimpan ke Supabase.', 'Sinkronisasi gagal');
+    }
+  };
+
   return (
     <button
       type="button"
-      onClick={() => state.status === 'error' && pushAll({ manual: true })}
+      onClick={handleClick}
       title={state.lastError ? `${config.title}\n${state.lastError}` : config.title}
       className={cn(
         'hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition sm:inline-flex',

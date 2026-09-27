@@ -25,6 +25,7 @@ import {
   updateUser,
 } from '../../services/authService';
 import { confirmDialog, toast } from '../../lib/toast';
+import { isSupabaseAuthEnabled } from '../../lib/supabase';
 import { formatDate } from '../../utils/helpers';
 import { cn } from '../../utils/helpers';
 
@@ -92,9 +93,13 @@ export default function AdminUsers() {
       toast.error(result.error);
       return;
     }
-    toast.success(
-      formModal.mode === 'edit' ? 'Data pengguna diperbarui.' : `Pengguna ${form.name} ditambahkan.`,
-    );
+    if (result.warning) {
+      toast.warning(result.warning);
+    } else {
+      toast.success(
+        formModal.mode === 'edit' ? 'Data pengguna diperbarui.' : `Pengguna ${form.name} ditambahkan.`,
+      );
+    }
     setFormModal(null);
   };
 
@@ -146,7 +151,8 @@ export default function AdminUsers() {
       toast.error(result.error);
       return;
     }
-    toast.success(`Password ${passwordModal.name} direset. Akses login terbuka kembali.`);
+    if (result.warning) toast.warning(result.warning);
+    else toast.success(`Password ${passwordModal.name} direset. Akses login terbuka kembali.`);
     setPasswordModal(null);
   };
 
@@ -350,8 +356,18 @@ export default function AdminUsers() {
                   className="dark-input font-mono"
                 />
                 <p className="mt-1.5 text-xs text-slate-500">
-                  Default <span className="font-semibold text-slate-400">{DEFAULT_PASSWORD}</span> —
-                  pengguna akan diminta menggantinya saat login.
+                  {isSupabaseAuthEnabled ? (
+                    <>
+                      Login memakai Supabase Auth — kolom ini tidak dipakai. Buat akun login di
+                      Supabase → Authentication → Users dengan email di atas.
+                    </>
+                  ) : (
+                    <>
+                      Default{' '}
+                      <span className="font-semibold text-slate-400">{DEFAULT_PASSWORD}</span> —
+                      pengguna akan diminta menggantinya saat login.
+                    </>
+                  )}
                 </p>
               </div>
             )}
@@ -373,34 +389,41 @@ export default function AdminUsers() {
         open={Boolean(passwordModal)}
         onClose={() => setPasswordModal(null)}
         dark
-        title="Reset Password"
-        description={passwordModal ? `Password baru untuk ${passwordModal.email}` : ''}
+        title={isSupabaseAuthEnabled ? 'Buka Akses Login' : 'Reset Password'}
+        description={passwordModal ? `Akses login untuk ${passwordModal.email}` : ''}
         size="sm"
       >
         {passwordModal && (
           <form onSubmit={handleResetPassword} className="space-y-4">
-            <div>
-              <label htmlFor="reset-password" className="dark-label">
-                Password Baru
-              </label>
-              <input
-                id="reset-password"
-                type="text"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="dark-input font-mono"
-              />
-              <p className="mt-1.5 text-xs text-slate-500">
-                Penghitung salah password juga dihapus sehingga akun dapat login kembali.
+            {isSupabaseAuthEnabled ? (
+              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-xs leading-relaxed text-amber-200">
+                Penghitung salah password di browser ini akan dihapus. Password login sendiri diatur
+                di Supabase → Authentication → Users (ubah atau kirim ulang undangan dari sana).
               </p>
-            </div>
+            ) : (
+              <div>
+                <label htmlFor="reset-password" className="dark-label">
+                  Password Baru
+                </label>
+                <input
+                  id="reset-password"
+                  type="text"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="dark-input font-mono"
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Penghitung salah password juga dihapus sehingga akun dapat login kembali.
+                </p>
+              </div>
+            )}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setPasswordModal(null)} className="dark-btn-ghost">
                 Batalkan
               </button>
               <button type="submit" disabled={saving} className="dark-btn-primary">
                 <KeyRound size={15} />
-                Reset Password
+                {isSupabaseAuthEnabled ? 'Buka Akses' : 'Reset Password'}
               </button>
             </div>
           </form>

@@ -81,15 +81,25 @@ create table if not exists public.users (
   email text unique not null,
   name text not null,
   role text not null default 'tu',
-  password_hash text not null,
+  -- Dipakai hanya saat aplikasi berjalan tanpa Supabase (mode lokal).
+  -- Bila login memakai Supabase Auth, password_hash dikosongkan.
+  password_hash text not null default '',
   must_change_password boolean default true,
   is_active boolean default true,
   permission_overrides jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz,
   last_login_at timestamptz,
-  password_changed_at timestamptz
+  password_changed_at timestamptz,
+  -- Penghubung ke akun login Supabase Auth (auth.users.id) + asal login
+  -- ('email' = password, 'azure' = Microsoft/Entra ID).
+  auth_user_id uuid unique,
+  auth_provider text default 'email'
 );
+
+-- Untuk database yang sudah ada sebelumnya (idempotent).
+alter table public.users add column if not exists auth_user_id uuid unique;
+alter table public.users add column if not exists auth_provider text default 'email';
 
 -- ---------------------------------------------------------------------
 -- Pembayaran SPP bulanan (join ke students)

@@ -310,12 +310,18 @@ function rowSignature(row) {
  * Bersihkan baris agar aman dikirim ke PostgREST:
  * - buang field internal (diawali "_")
  * - ubah string kosong menjadi null (kolom numeric/date menolak "")
+ * - kecuali password_hash: kolom itu NOT NULL, sedangkan pengguna yang login
+ *   lewat Supabase Auth memang tidak punya hash lokal (string kosong)
  */
 function cleanRow(row) {
   const out = {};
   Object.entries(row).forEach(([key, value]) => {
     if (key.startsWith('_')) return;
     if (value === undefined) return;
+    if (key === 'password_hash') {
+      out[key] = typeof value === 'string' ? value : '';
+      return;
+    }
     out[key] = value === '' ? null : value;
   });
   return out;

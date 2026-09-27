@@ -7,6 +7,7 @@
  */
 import { getDB, commit, hashPassword, verifyPassword } from '../lib/db';
 import { uid } from '../utils/helpers';
+import { supabase, isSupabaseAuthEnabled } from '../lib/supabase';
 
 const SESSION_KEY = 'assalam.tu.session';
 
@@ -189,7 +190,7 @@ export async function ensureSeedUsers() {
         name: seed.name,
         role: seed.role,
         must_change_password: true,
-        password_hash: await hashPassword(DEFAULT_PASSWORD),
+        password_hash: isSupabaseAuthEnabled ? '' : await hashPassword(DEFAULT_PASSWORD),
         created_at: new Date().toISOString(),
         last_login_at: null,
       };
@@ -198,7 +199,10 @@ export async function ensureSeedUsers() {
       continue;
     }
 
-    // Migrasi akun lama (mis. admin123) ke password default terbaru.
+    // Migrasi akun lama (mis. admin123) ke password default terbaru. Tidak perlu
+    // saat login memakai Supabase Auth karena hash lokal tidak dipakai lagi.
+    if (isSupabaseAuthEnabled) continue;
+
     for (const legacy of LEGACY_PASSWORDS) {
       // eslint-disable-next-line no-await-in-loop
       if (await verifyPassword(legacy, existing.password_hash)) {
@@ -283,12 +287,48 @@ export function getSession() {
   }
 }
 
-function saveSession(user) {
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* diabaikan */
+  }
+}
+
+/**
+ * Simpan sesi aplikasi.
+ * `authMethod`: 'password' | 'otp' | 'sso' — menentukan apakah pengguna punya
+ * password di aplikasi ini (mis. popup ganti password hanya untuk 'password').
+ */
+const METHOD_KEY_PREFIX = 'assalam.tu.auth_method.';
+
+/** Ingat cara login terakhir pengguna (dipakai saat sesi dipulihkan). */
+function rememberAuthMethod(userId, method) {
+  try {
+    localStorage.setItem(`${METHOD_KEY_PREFIX}${userId}`, method);
+  } catch {
+    /* diabaikan */
+  }
+}
+
+function readAuthMethod(userId) {
+  try {
+    return localStorage.getItem(`${METHOD_KEY_PREFIX}${userId}`) || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(user, authMethod = 'password') {
+  rememberAuthMethod(user.id, authMethod);
   const session = {
     user_id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    auth_user_id: user.auth_user_id ?? null,
+    auth_provider: user.auth_provider || 'email',
+    auth_method: authMethod,
     must_change_password: user.must_change_password !== false,
     logged_in_at: new Date().toISOString(),
   };
@@ -296,22 +336,274 @@ function saveSession(user) {
   return session;
 }
 
-export async function login(email, password) {
-  await ensureSeedUsers();
-  const db = getDB();
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-  const user = (db.users || []).find((u) => u.email.toLowerCase() === normalizedEmail);
+/* ------------------------------------------------------------------ */
+/* Langkah kedua login: kode dari aplikasi authenticator (TOTP)        */
+/* ------------------------------------------------------------------ */
+const PENDING_KEY = 'assalam.tu.mfa_pending';
+/** Batas waktu menyelesaikan langkah MFA (15 menit). */
+const PENDING_TTL_MS = 15 * 60 * 1000;
 
-  const state = getLoginAttemptState(normalizedEmail);
-  if (state.locked) {
+function setPendingMfa(payload) {
+  try {
+    localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ ...payload, at: new Date().toISOString() }),
+    );
+  } catch {
+    /* diabaikan */
+  }
+}
+
+/**
+ * Data langkah-2 yang sedang menunggu kode (null bila tidak ada / kadaluarsa).
+ * Dipakai halaman login agar bisa lanjut ke input kode walau halaman di-refresh.
+ */
+export function getPendingMfa() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.at || Date.now() - new Date(parsed.at).getTime() > PENDING_TTL_MS) {
+      localStorage.removeItem(PENDING_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingMfa() {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* diabaikan */
+  }
+}
+
+/** Baris pengguna aplikasi (tabel users) berdasarkan email. */
+function findUserByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  return (getDB().users || []).find((u) => String(u.email).toLowerCase() === normalized) || null;
+}
+
+/**
+ * Email akun guest Microsoft (B2B) berbentuk
+ * `nama_gmail.com#EXT#@tenant.onmicrosoft.com`; kembalikan bentuk aslinya
+ * (`nama@gmail.com`) supaya bisa dicocokkan dengan baris pengguna.
+ */
+function emailFromGuestUpn(value) {
+  const text = String(value || '').trim();
+  if (!text.includes('#EXT#')) return null;
+  const local = text.split('#EXT#')[0];
+  const at = local.lastIndexOf('_');
+  if (at <= 0) return null;
+  return `${local.slice(0, at)}@${local.slice(at + 1)}`.toLowerCase();
+}
+
+/**
+ * Cocokkan akun Supabase Auth dengan baris pengguna aplikasi (role & hak akses):
+ * lewat kolom `auth_user_id` lebih dulu, lalu email (termasuk email guest
+ * Microsoft), lalu metadata dari provider.
+ */
+function resolveAuthUser(authUser) {
+  if (!authUser) return null;
+  const users = getDB().users || [];
+
+  const byId = users.find((u) => u.auth_user_id && u.auth_user_id === authUser.id);
+  if (byId) return byId;
+
+  const candidates = [
+    authUser.email,
+    emailFromGuestUpn(authUser.email),
+    authUser.user_metadata?.email,
+    authUser.user_metadata?.preferred_username,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase());
+
+  return users.find((u) => candidates.includes(String(u.email).trim().toLowerCase())) || null;
+}
+
+/** Penyedia login yang dipakai akun Supabase Auth ('email', 'google', dst.). */
+function providerOf(authUser) {
+  if (!authUser) return 'email';
+  return authUser.app_metadata?.provider || 'oauth';
+}
+
+/** Nama penyedia login untuk pesan ke pengguna. */
+function providerLabel(provider) {
+  if (provider === 'google') return 'Google';
+  if (provider === 'azure') return 'Microsoft';
+  return 'SSO';
+}
+
+/**
+ * Catat waktu login terakhir dan sambungkan baris pengguna dengan akun
+ * Supabase Auth (kolom auth_user_id + auth_provider).
+ */
+function markLogin(user, authUser) {
+  const now = new Date().toISOString();
+  const authUserId = authUser?.id ?? null;
+  const provider = authUser ? providerOf(authUser) : user.auth_provider || 'email';
+
+  commit((draft) => {
+    const target = (draft.users || []).find((u) => u.id === user.id);
+    if (!target) return;
+    target.last_login_at = now;
+    if (authUserId && target.auth_user_id !== authUserId) target.auth_user_id = authUserId;
+    if (authUser && target.auth_provider !== provider) target.auth_provider = provider;
+  });
+
+  return {
+    ...user,
+    auth_user_id: authUserId ?? user.auth_user_id ?? null,
+    auth_provider: authUser ? provider : user.auth_provider || 'email',
+  };
+}
+
+/** Penyedia login SSO yang tersedia di aplikasi ini. */
+export const SSO_PROVIDERS = {
+  google: { slug: 'google', label: 'Google', scopes: 'email openid profile' },
+};
+
+/**
+ * Login memakai penyedia SSO (akun Google). Password dan verifikasi dua langkah
+ * ditangani penyedianya; aplikasi hanya menerima sesi Supabase hasil login itu.
+ */
+export async function loginWithSso(provider = 'google', redirectTo) {
+  const config = SSO_PROVIDERS[provider];
+  if (!config) return { ok: false, error: `Penyedia login ${provider} tidak dikenal.` };
+
+  if (!isSupabaseAuthEnabled) {
     return {
       ok: false,
-      locked: true,
-      error:
-        'Akun terkunci karena 3 kali salah password. Silakan hubungi Administrator untuk membuka akses.',
+      error: `Login ${config.label} memerlukan Supabase (VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY pada .env).`,
     };
   }
 
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: config.slug,
+    options: {
+      scopes: config.scopes,
+      redirectTo: redirectTo || `${window.location.origin}/`,
+    },
+  });
+
+  if (error) {
+    return { ok: false, error: `Gagal membuka halaman login ${config.label}: ${error.message}` };
+  }
+  // Halaman berpindah ke penyedia login; sisanya ditangani redirect balik.
+  return { ok: true };
+}
+
+/** Pintasan login Google (dipakai halaman login). */
+export function loginWithGoogle(redirectTo) {
+  return loginWithSso('google', redirectTo);
+}
+
+/** Apakah sesi Supabase Auth masih hidup (user SSO tidak punya password). */
+export async function ensureActiveAuthSession() {
+  if (!isSupabaseAuthEnabled) return true;
+  try {
+    const { data } = await supabase.auth.getSession();
+    return Boolean(data?.session);
+  } catch {
+    return false;
+  }
+}
+
+const LOCKED_MESSAGE =
+  'Akun terkunci karena 3 kali salah password. Silakan hubungi Administrator untuk membuka akses.';
+
+/** Catat percobaan login gagal, kembalikan pesan sisa percobaan / status kunci. */
+function failAttempt(normalizedEmail, label = 'Password') {
+  const count = registerFailedAttempt(normalizedEmail);
+  const remaining = Math.max(MAX_ATTEMPTS - count, 0);
+  if (remaining <= 0) return { ok: false, locked: true, error: LOCKED_MESSAGE };
+  return {
+    ok: false,
+    remaining,
+    error: `${label} salah. Sisa ${remaining} percobaan sebelum akun terkunci.`,
+  };
+}
+
+export async function login(email, password) {
+  await ensureSeedUsers();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
+  const state = getLoginAttemptState(normalizedEmail);
+  if (state.locked) {
+    return { ok: false, locked: true, error: LOCKED_MESSAGE };
+  }
+
+  if (isSupabaseAuthEnabled) {
+    // Password diverifikasi Supabase Auth (hash ditangani server, bukan browser).
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (error) {
+      if (/invalid login credentials/i.test(error.message)) return failAttempt(normalizedEmail);
+      if (/email not confirmed/i.test(error.message)) {
+        return {
+          ok: false,
+          error:
+            'Email belum dikonfirmasi di Supabase. Minta Administrator mengaktifkan akun di Supabase → Authentication → Users.',
+        };
+      }
+      return { ok: false, error: `Login gagal: ${error.message}` };
+    }
+
+    // Akun SSO (Google/Microsoft) tidak punya password di aplikasi ini.
+    const known = findUserByEmail(normalizedEmail);
+    if (known?.auth_provider && known.auth_provider !== 'email') {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        error: `Akun ini memakai login ${providerLabel(known.auth_provider)}. Gunakan tombol “Masuk dengan ${providerLabel(known.auth_provider)}”.`,
+      };
+    }
+
+    // Role & hak akses tetap dibaca dari tabel users (dicocokkan lewat email).
+    const user = findUserByEmail(normalizedEmail);
+    if (!user) {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        error:
+          `Login Supabase berhasil, tetapi email ${normalizedEmail} belum terdaftar sebagai pengguna aplikasi. ` +
+          'Samakan email akun Supabase dengan baris pada tabel users (mis. admin@assalam.sch.id) atau tambahkan baris pengguna dengan email tersebut.',
+      };
+    }
+    if (user.is_active === false) {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        locked: true,
+        error: 'Akun ini dinonaktifkan. Silakan hubungi Administrator.',
+      };
+    }
+
+    resetLoginAttempts(normalizedEmail);
+
+    // Langkah kedua: kode dari aplikasi authenticator. Sesi aplikasi baru
+    // dibuat setelah kode diverifikasi (lihat verifyTotp / startTotpEnrollment).
+    const mfa = await describeMfaState();
+    setPendingMfa({ email: normalizedEmail, userId: user.id, mode: mfa.mode });
+    return {
+      ok: true,
+      requiresMfa: true,
+      mfaMode: mfa.mode, // 'verify' (sudah punya authenticator) | 'enroll' (belum)
+      factorId: mfa.factorId,
+      email: normalizedEmail,
+      user,
+    };
+  }
+
+  /* --- Mode lokal (Supabase belum dikonfigurasi): hash lokal --- */
+  const user = findUserByEmail(normalizedEmail);
   if (!user) {
     return { ok: false, error: 'Email tidak terdaftar.' };
   }
@@ -325,61 +617,289 @@ export async function login(email, password) {
   }
 
   const valid = await verifyPassword(password, user.password_hash);
-  if (!valid) {
-    const count = registerFailedAttempt(normalizedEmail);
-    const remaining = Math.max(MAX_ATTEMPTS - count, 0);
-    if (remaining <= 0) {
-      return {
-        ok: false,
-        locked: true,
-        error:
-          'Akun terkunci karena 3 kali salah password. Silakan hubungi Administrator untuk membuka akses.',
-      };
-    }
-    return {
-      ok: false,
-      remaining,
-      error: `Password salah. Sisa ${remaining} percobaan sebelum akun terkunci.`,
-    };
-  }
+  if (!valid) return failAttempt(normalizedEmail);
 
   resetLoginAttempts(normalizedEmail);
-
-  commit((draft) => {
-    const target = draft.users.find((u) => u.id === user.id);
-    if (target) target.last_login_at = new Date().toISOString();
-  });
-
-  const session = saveSession(user);
+  const session = saveSession(markLogin(user, null), 'password');
   return { ok: true, session, user };
 }
 
-/** Password default bawaan yang sebaiknya segera diganti pengguna. */
-export function shouldPromptPasswordChange(user) {
-  if (!user) return false;
-  return user.must_change_password !== false;
+/**
+ * Kondisi MFA akun yang sedang login: apakah sudah punya authenticator
+ * terverifikasi atau masih perlu mendaftarkan.
+ */
+async function describeMfaState() {
+  try {
+    const { data } = await supabase.auth.mfa.listFactors();
+    const totp = data?.totp || [];
+    const verified = totp.find((factor) => factor.status === 'verified');
+    if (verified) return { mode: 'verify', factorId: verified.id };
+    return { mode: 'enroll', factorId: null };
+  } catch {
+    return { mode: 'enroll', factorId: null };
+  }
+}
+
+/**
+ * Mulai pendaftaran authenticator (TOTP) untuk pengguna yang sedang login.
+ * Mengembalikan QR (data URI) + kode rahasia untuk dimasukkan manual.
+ */
+export async function startTotpEnrollment() {
+  if (!isSupabaseAuthEnabled) {
+    return { ok: false, error: 'MFA memerlukan Supabase Auth (env var belum diisi).' };
+  }
+
+  // Bersihkan faktor yang belum pernah diverifikasi agar tidak menumpuk.
+  try {
+    const { data } = await supabase.auth.mfa.listFactors();
+    const pending = (data?.totp || []).filter((factor) => factor.status !== 'verified');
+    for (const factor of pending) {
+      // eslint-disable-next-line no-await-in-loop
+      const { error: unenrollError } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+      if (unenrollError) {
+        console.warn('[auth] Gagal membersihkan faktor MFA lama:', unenrollError.message);
+      }
+    }
+  } catch (error) {
+    console.warn('[auth] Gagal membaca daftar faktor MFA:', error?.message || error);
+  }
+
+  const { data, error } = await supabase.auth.mfa.enroll({
+    factorType: 'totp',
+    // Nama faktor harus unik per akun — kalau tidak, Supabase menolak dengan
+    // "A factor with the friendly name ... already exists".
+    friendlyName: `Sistem TU ${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`,
+  });
+
+  if (error) {
+    const conflict = /already exists/i.test(error.message);
+    return {
+      ok: false,
+      error: conflict
+        ? 'Masih ada pendaftaran authenticator lama yang belum selesai di akun ini. Hapus faktor tersebut dulu di Supabase → Authentication → Users → user → bagian Factors, lalu klik Coba lagi.'
+        : `Gagal memulai pendaftaran authenticator: ${error.message}`,
+    };
+  }
+
+  return {
+    ok: true,
+    factorId: data.id,
+    qrCode: data.totp?.qr_code ?? null,
+    secret: data.totp?.secret ?? null,
+  };
+}
+
+/**
+ * Verifikasi kode 6 angka dari aplikasi authenticator.
+ * Dipakai untuk menyelesaikan pendaftaran maupun login berikutnya, lalu
+ * membuka sesi aplikasi (session menjadi aal2 di Supabase).
+ */
+export async function verifyTotp(factorId, code, { expectedUserId } = {}) {
+  if (!isSupabaseAuthEnabled) {
+    return { ok: false, error: 'MFA memerlukan Supabase Auth (env var belum diisi).' };
+  }
+
+  const cleanCode = String(code || '').replace(/\D/g, '');
+  if (cleanCode.length !== 6) return { ok: false, error: 'Kode terdiri dari 6 angka.' };
+  if (!factorId) return { ok: false, error: 'Sesi MFA tidak ditemukan. Silakan login ulang.' };
+
+  const pending = getPendingMfa();
+  const email = pending?.email || '';
+
+  const state = email ? getLoginAttemptState(email) : { locked: false };
+  if (state.locked) return { ok: false, locked: true, error: LOCKED_MESSAGE };
+
+  const { data, error } = await supabase.auth.mfa.challengeAndVerify({
+    factorId,
+    code: cleanCode,
+  });
+
+  if (error) {
+    if (email && /invalid|expired|code/i.test(error.message)) return failAttempt(email, 'Kode');
+    return { ok: false, error: `Verifikasi kode gagal: ${error.message}` };
+  }
+
+  // Ambil akun dari sesi Supabase (sudah aal2) lalu cocokkan dengan baris pengguna.
+  let authUser = data?.user ?? null;
+  if (!authUser) {
+    const { data: sessionData } = await supabase.auth.getUser();
+    authUser = sessionData?.user ?? null;
+  }
+
+  const user = resolveAuthUser(authUser) || findUserByEmail(email);
+  if (!user || user.is_active === false) {
+    await supabase.auth.signOut();
+    clearPendingMfa();
+    return {
+      ok: false,
+      error: 'Akun ini belum terdaftar sebagai pengguna aplikasi. Hubungi Administrator TU.',
+    };
+  }
+
+  // Kode harus milik akun yang sama seperti langkah password.
+  if (expectedUserId && user.id !== expectedUserId) {
+    await supabase.auth.signOut();
+    clearPendingMfa();
+    return { ok: false, error: 'Kode ini milik akun lain. Silakan ulangi login dari awal.' };
+  }
+
+  if (email) resetLoginAttempts(email);
+  clearPendingMfa();
+  const linked = markLogin(user, authUser);
+  const session = saveSession(linked, 'password');
+  return { ok: true, session, user: linked };
+}
+
+/**
+ * Pulihkan sesi aplikasi dari sesi Supabase Auth yang masih hidup.
+ * Mengembalikan null bila sesi Supabase sudah tidak ada (mis. kadaluarsa,
+ * logout di tab lain, atau akunnya sudah tidak aktif).
+ */
+/** Sesuaikan akun dari sesi Supabase yang tersimpan (null bila belum ada). */
+async function readAuthUser() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** URL hasil redirect OAuth (login Microsoft) yang belum diproses Supabase. */
+function hasAuthParamsInUrl() {
+  if (typeof window === 'undefined') return false;
+  const { search, hash } = window.location;
+  return (
+    /[?&](code|access_token|error_description)=/.test(search) ||
+    /(access_token|error_description)=/.test(hash)
+  );
+}
+
+export async function restoreSession() {
+  const stored = getSession();
+  if (!isSupabaseAuthEnabled) return stored;
+
+  // Login dua langkah yang belum selesai: jangan pulihkan sesi walau sesi
+  // password Supabase masih hidup di browser.
+  if (getPendingMfa()) {
+    clearSession();
+    return null;
+  }
+
+  let authUser = await readAuthUser();
+
+  // Kembali dari login Microsoft: Supabase masih menukar kode di URL jadi sesi.
+  if (!authUser && hasAuthParamsInUrl()) {
+    for (let attempt = 0; attempt < 5 && !authUser; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      // eslint-disable-next-line no-await-in-loop
+      authUser = await readAuthUser();
+    }
+  }
+
+  if (!authUser) {
+    if (stored) clearSession();
+    return null;
+  }
+
+  // Punya authenticator tapi kodenya belum diverifikasi (masih aal1) → tolak.
+  try {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+      clearSession();
+      return null;
+    }
+  } catch {
+    /* diabaikan — bila API MFA tidak tersedia, lanjut memakai sesi biasa */
+  }
+
+  const user = resolveAuthUser(authUser);
+  if (!user || user.is_active === false) {
+    await supabase.auth.signOut();
+    clearSession();
+    return null;
+  }
+
+  if (stored && String(stored.user_id) === String(user.id)) return stored;
+
+  // Simpan cara login (password / kode email / SSO) agar perilaku sesi konsisten
+  // setelah halaman dimuat ulang.
+  const method =
+    stored?.auth_method ||
+    readAuthMethod(user.id) ||
+    (providerOf(authUser) !== 'email' ? 'sso' : 'password');
+  return saveSession(markLogin(user, authUser), method);
+}
+
+/**
+ * Password default bawaan yang sebaiknya segera diganti pengguna.
+ * Hanya berlaku untuk login dengan password — user kode email / SSO tidak
+ * punya password di aplikasi ini.
+ */
+export function shouldPromptPasswordChange(account) {
+  if (!account) return false;
+  if (account.auth_method) {
+    return account.auth_method === 'password' && account.must_change_password !== false;
+  }
+  if (account.auth_provider && account.auth_provider !== 'email') return false;
+  return account.must_change_password !== false;
 }
 
 export function logout() {
-  localStorage.removeItem(SESSION_KEY);
+  clearSession();
+  clearPendingMfa();
+  if (isSupabaseAuthEnabled) {
+    // Hapus juga sesi Supabase agar tidak bisa dipulihkan dari localStorage.
+    supabase.auth.signOut().catch(() => {});
+  }
 }
 
 export async function changePassword(userId, currentPassword, newPassword) {
   const db = getDB();
   const user = (db.users || []).find((u) => u.id === userId);
   if (!user) return { ok: false, error: 'Pengguna tidak ditemukan.' };
-
-  const valid = await verifyPassword(currentPassword, user.password_hash);
-  if (!valid) return { ok: false, error: 'Password saat ini salah.' };
+  if (user.auth_provider && user.auth_provider !== 'email') {
+    return {
+      ok: false,
+      error: `Akun ini memakai login ${providerLabel(user.auth_provider)} — passwordnya diatur di akun ${providerLabel(user.auth_provider)} Anda.`,
+    };
+  }
   if (!newPassword || newPassword.length < 6) {
     return { ok: false, error: 'Password baru minimal 6 karakter.' };
   }
 
-  const password_hash = await hashPassword(newPassword);
+  if (isSupabaseAuthEnabled) {
+    // Supabase tidak punya endpoint "cek password lama", jadi password saat ini
+    // diverifikasi dengan login ulang (sesi tetap milik pengguna yang sama).
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (verifyError) return { ok: false, error: 'Password saat ini salah.' };
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { ok: false, error: `Gagal mengubah password: ${error.message}` };
+
+    // Hash lokal tidak dipakai lagi, tetapi dibersihkan agar tidak jadi cadangan lemah.
+    commit((draft) => {
+      const target = draft.users.find((u) => u.id === userId);
+      if (target) target.password_hash = '';
+    });
+  } else {
+    const valid = await verifyPassword(currentPassword, user.password_hash);
+    if (!valid) return { ok: false, error: 'Password saat ini salah.' };
+
+    const password_hash = await hashPassword(newPassword);
+    commit((draft) => {
+      const target = draft.users.find((u) => u.id === userId);
+      if (target) target.password_hash = password_hash;
+    });
+  }
+
   commit((draft) => {
     const target = draft.users.find((u) => u.id === userId);
     if (target) {
-      target.password_hash = password_hash;
       target.must_change_password = false;
       target.password_changed_at = new Date().toISOString();
     }
@@ -400,6 +920,15 @@ export async function changePassword(userId, currentPassword, newPassword) {
 }
 
 export function updateProfile(userId, payload) {
+  const current = (getDB().users || []).find((u) => u.id === userId);
+  const nextEmail = String(payload.email ?? current?.email ?? '').trim().toLowerCase();
+  // Email adalah identitas login di Supabase Auth. Bila diubah di sini tanpa
+  // mengubah akun Supabase, pengguna akan terkunci dari baris pengguna ini —
+  // jadi perubahan email dilakukan lewat dashboard Supabase.
+  if (isSupabaseAuthEnabled && current && nextEmail !== String(current.email).toLowerCase()) {
+    return null;
+  }
+
   return commit((draft) => {
     const target = draft.users.find((u) => u.id === userId);
     if (!target) return null;
@@ -435,6 +964,21 @@ export function getUser(id) {
 export async function verifyUserPassword(userId, password) {
   const user = getUser(userId);
   if (!user) return { ok: false, error: 'Pengguna tidak ditemukan.' };
+  if (user.auth_provider && user.auth_provider !== 'email') {
+    return {
+      ok: false,
+      error: `Akun ini memakai login ${providerLabel(user.auth_provider)} — konfirmasi password tidak berlaku.`,
+    };
+  }
+
+  if (isSupabaseAuthEnabled) {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password,
+    });
+    return error ? { ok: false, error: 'Password salah.' } : { ok: true };
+  }
+
   const valid = await verifyPassword(password, user.password_hash);
   return valid ? { ok: true } : { ok: false, error: 'Password salah.' };
 }
@@ -459,7 +1003,8 @@ export async function createUser({ name, email, role, password, permissions }) {
     name: name.trim(),
     email: normalizedEmail,
     role,
-    password_hash: await hashPassword(password),
+    // Hash lokal hanya dipakai saat Supabase belum dikonfigurasi (mode lokal).
+    password_hash: isSupabaseAuthEnabled ? '' : await hashPassword(password),
     must_change_password: true,
     is_active: true,
     permission_overrides: permissions && Object.keys(permissions).length ? permissions : null,
@@ -470,7 +1015,13 @@ export async function createUser({ name, email, role, password, permissions }) {
   commit((draft) => {
     draft.users = [...(draft.users || []), user];
   });
-  return { ok: true, user };
+  return {
+    ok: true,
+    user,
+    warning: isSupabaseAuthEnabled
+      ? `Akun login Supabase belum dibuat. Tambahkan user dengan email ${normalizedEmail} di Supabase → Authentication → Users agar bisa masuk.`
+      : undefined,
+  };
 }
 
 export function updateUser(id, payload) {
@@ -505,6 +1056,18 @@ export function updateUser(id, payload) {
 export async function resetUserPassword(id, newPassword = DEFAULT_PASSWORD) {
   const current = getUser(id);
   if (!current) return { ok: false, error: 'Pengguna tidak ditemukan.' };
+
+  if (isSupabaseAuthEnabled) {
+    // Password dikelola Supabase Auth, jadi hanya penghitung salah password
+    // (yang tersimpan di browser ini) yang bisa dibuka dari aplikasi.
+    resetLoginAttempts(current.email);
+    return {
+      ok: true,
+      warning:
+        'Password login diatur Supabase Auth. Ubah password akun ini di Supabase → Authentication → Users.',
+    };
+  }
+
   if (String(newPassword).length < 6) return { ok: false, error: 'Password minimal 6 karakter.' };
 
   const password_hash = await hashPassword(newPassword);

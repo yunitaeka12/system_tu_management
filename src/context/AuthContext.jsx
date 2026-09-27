@@ -24,6 +24,19 @@ export function AuthProvider({ children }) {
       } catch (error) {
         console.error('[auth] Gagal menyiapkan akun bawaan:', error);
       }
+      // Sesi tersimpan hanya dipercaya bila sesi Supabase Auth (kalau aktif)
+      // masih hidup — mis. setelah logout di tab lain atau token kadaluarsa.
+      try {
+        const restored = await authService.restoreSession();
+        if (mounted) {
+          setSession(restored);
+          setPasswordPromptOpen(
+            restored ? authService.shouldPromptPasswordChange(restored) : false,
+          );
+        }
+      } catch (error) {
+        console.error('[auth] Gagal memulihkan sesi:', error);
+      }
       if (mounted) setReady(true);
     })();
     return () => {
@@ -33,13 +46,34 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const result = await authService.login(email, password);
-    if (result.ok) {
+    // result.requiresMfa → sesi belum dibuka; halaman login lanjut meminta kode
+    // dari aplikasi authenticator (langkah kedua).
+    if (result.ok && result.session) {
       setSession(result.session);
       // Popup "ganti password" muncul saat login selama password masih bawaan.
-      setPasswordPromptOpen(authService.shouldPromptPasswordChange(result.user));
+      setPasswordPromptOpen(authService.shouldPromptPasswordChange(result.session));
     }
     return result;
   }, []);
+
+  /** Mulai pendaftaran authenticator (TOTP) untuk langkah kedua login. */
+  const startTotpEnrollment = useCallback(() => authService.startTotpEnrollment(), []);
+
+  /** Verifikasi kode authenticator lalu buka sesi aplikasi. */
+  const verifyTotp = useCallback(async (factorId, code, expectedUserId) => {
+    const result = await authService.verifyTotp(factorId, code, { expectedUserId });
+    if (result.ok) {
+      setSession(result.session);
+      setPasswordPromptOpen(authService.shouldPromptPasswordChange(result.session));
+    }
+    return result;
+  }, []);
+
+  /** Login memakai akun Google; browser dialihkan ke halaman login Google. */
+  const loginWithGoogle = useCallback(
+    (redirectTo) => authService.loginWithGoogle(redirectTo),
+    [],
+  );
 
   const logout = useCallback(() => {
     authService.logout();
@@ -61,6 +95,9 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(session),
       ready,
       login,
+      loginWithGoogle,
+      startTotpEnrollment,
+      verifyTotp,
       logout,
       refreshSession,
       passwordPromptOpen,
@@ -69,7 +106,18 @@ export function AuthProvider({ children }) {
       roleLabel: session ? authService.ROLE_LABELS[session.role] ?? session.role : null,
       isAdministrator: session?.role === authService.ROLES.ADMINISTRATOR,
     }),
-    [session, ready, login, logout, refreshSession, passwordPromptOpen, dismissPasswordPrompt],
+    [
+      session,
+      ready,
+      login,
+      loginWithGoogle,
+      startTotpEnrollment,
+      verifyTotp,
+      logout,
+      refreshSession,
+      passwordPromptOpen,
+      dismissPasswordPrompt,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -41,6 +41,74 @@ Bila `.env` belum diisi, aplikasi tetap berjalan penuh dalam **mode lokal**
 Saat pertama dibuka, data hasil import Excel otomatis diunggah ke Supabase bila
 tabelnya masih kosong.
 
+### 1b. Login memakai Supabase Auth (disarankan)
+
+Bila `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` terisi, aplikasi otomatis
+memakai **Supabase Auth** untuk memverifikasi password (hash ditangani server).
+Kalau env var kosong, login kembali ke **mode lokal** (hash SHA-256 di browser).
+
+1. Tambahkan kolom penghubung ke akun login — jalankan di **SQL Editor**:
+
+   ```sql
+   alter table public.users add column if not exists auth_user_id uuid unique;
+   alter table public.users add column if not exists auth_provider text default 'email';
+   ```
+
+2. **Authentication → Providers → Email**: aktifkan.
+3. **Authentication → Settings**: matikan **Confirm email** (akun dibuat oleh
+   Administrator, bukan pendaftaran sendiri) dan set minimal password 8 karakter.
+4. **Authentication → Users → Add user** untuk tiap pengguna. Emailnya **harus
+   sama persis** dengan baris di tabel `users` (mis. `admin@assalam.sch.id`,
+   `yunitaeka12@gmail.com`) supaya role & hak aksesnya ketemu. Kolom
+   `auth_user_id` terisi otomatis saat login pertama berhasil.
+5. Menambah user baru: buat dulu di **Admin Panel** (nama, email, role), lalu
+   buat akun login-nya di Supabase dengan email yang sama.
+6. Reset/lupa password: dari **Supabase → Authentication → Users**, bukan lewat
+   Admin Panel. Tombol *Reset Password* di Admin Panel hanya membuka kembali
+   akses yang terkunci 3x salah password.
+7. Ganti password dari aplikasi memakai `supabase.auth.updateUser`, sehingga
+   hash lokal tidak dipakai lagi (`password_hash` dikosongkan). Email login juga
+   tidak bisa diubah dari Profil — ubah di dashboard Supabase.
+
+Sesi login divalidasi ulang dengan sesi Supabase saat aplikasi dibuka: bila sesi
+Supabase sudah tidak ada (logout di tab lain / token kadaluarsa), pengguna
+otomatis diarahkan ke halaman login.
+
+### 1c. Login dua langkah: password + kode authenticator (TOTP)
+
+Setelah kedua env var Supabase terisi, login berjalan dua langkah: **(1) email +
+password**, lalu **(2) kode 6 angka dari aplikasi authenticator**. Tidak butuh
+domain, SMTP, atau layanan email. Kalau env var Supabase kosong, login kembali
+satu langkah (mode lokal).
+
+1. **Supabase → Authentication → Sign In / Providers → Email**: aktifkan
+   **Email provider**. `Confirm email` boleh OFF (akun dibuat Administrator).
+2. **Supabase → Authentication → Multi-Factor**: biarkan **TOTP** aktif
+   (bawaan). Phone MFA tidak dipakai karena berbayar lewat Twilio.
+3. **User**: buat akun di **Authentication → Users** dengan email yang sama
+   seperti baris di tabel `users` (Admin Panel) beserta password. Aplikasi
+   memakai `shouldCreateUser: false`, jadi orang luar tidak bisa mendaftar.
+4. **Pendaftaran authenticator**: saat login pertama, setelah password benar
+   aplikasi menampilkan QR — pindai dengan Google Authenticator/Authy/Microsoft
+   Authenticator (ada juga kode manual bila QR tidak bisa dipindai), lalu
+   masukkan 6 angka untuk mengaktifkan.
+5. **Login berikutnya**: password → kode 6 angka dari aplikasi tersebut. Sesi
+   Supabase naik ke **aal2** setelah kode benar, dan aplikasi menolak memulihkan
+   sesi selama kode belum diverifikasi (anti-bypass refresh).
+6. Batas 3x salah password / salah kode tetap berlaku (penghitung di browser).
+   Langkah 2 yang belum selesai batal sendiri setelah 15 menit.
+7. **Lupa HP / HP hilang**: Administrator menghapus faktor TOTP akun tersebut
+   dari **Supabase → Authentication → Users → (pilih user) → Factor**, lalu
+   pengguna mendaftarkan authenticator baru saat login berikutnya.
+
+> Alur password (popup “ganti password”, konfirmasi tiap 3 jam) tetap berlaku
+> karena semua pengguna login dengan password. Login Google/Microsoft juga masih
+> tersedia di kode (`loginWithSso()`), tinggal diaktifkan provider-nya.
+
+> ⚠️ RLS pada `supabase/schema.sql` masih **permisif**, jadi anon key tetap bisa
+> dipakai membaca data langsung lewat API. Setelah login pindah ke Supabase Auth,
+> perketat policy-nya (mis. `using ((auth.jwt() ->> 'aal') = 'aal2')` untuk MFA).
+
 ### 2. Import data Buku Induk (opsional)
 
 ```bash

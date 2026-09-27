@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, Lock, ShieldAlert } from 'lucide-react';
 import Modal from './Modal';
 import { useAuth } from '../context/AuthContext';
-import { verifyUserPassword } from '../services/authService';
+import { ensureActiveAuthSession, verifyUserPassword } from '../services/authService';
 import { toast } from '../lib/toast';
 
 /** Interval konfirmasi password (3 jam). */
@@ -78,7 +78,25 @@ export default function SessionGuard() {
     if (!session) return undefined;
     const dueAt = readLastVerify(session) + REAUTH_INTERVAL_MS;
     const delay = Math.max(dueAt - Date.now(), 0);
-    const timer = setTimeout(() => {
+
+    // User tanpa password (kode email / Google) tidak bisa diminta password:
+    // yang dicek hanya masa berlaku sesi loginnya.
+    const isPasswordless = session.auth_method
+      ? session.auth_method !== 'password'
+      : Boolean(session.auth_provider) && session.auth_provider !== 'email';
+
+    const timer = setTimeout(async () => {
+      if (isPasswordless) {
+        const active = await ensureActiveAuthSession();
+        if (!active) {
+          endSession('Sesi login Anda sudah berakhir — silakan masuk kembali.');
+          return;
+        }
+        writeLastVerify(session);
+        setVerifiedAt(Date.now());
+        return;
+      }
+
       endedRef.current = false;
       setPassword('');
       setError('');
@@ -86,7 +104,7 @@ export default function SessionGuard() {
       setOpen(true);
     }, delay);
     return () => clearTimeout(timer);
-  }, [session, verifiedAt]);
+  }, [session, verifiedAt, endSession]);
 
   // Hitung mundur 60 detik saat modal terbuka.
   useEffect(() => {

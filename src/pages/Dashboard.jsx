@@ -37,7 +37,6 @@ import {
   useRecentPayments,
   useTopOutstanding,
 } from '../hooks/usePayments';
-import { useAuth } from '../context/AuthContext';
 import { formatCurrency, formatNumber, formatPercent, compactCurrency } from '../utils/currency';
 import { formatDate, initials, timeAgo } from '../utils/helpers';
 import { PAYMENT_STATUS, PAYMENT_STATUS_LABEL } from '../utils/paymentCalculator';
@@ -409,33 +408,18 @@ export default function Dashboard() {
   const recent = useRecentPayments(6);
   const outstanding = useTopOutstanding(5);
   const classInsight = useClassInsight(6);
-  const { can } = useAuth();
 
   return (
     <div>
       <PageHeader
         title="Dashboard"
         subtitle="Ringkasan Buku Induk dan pembayaran siswa SDIT As-Salam."
-        actions={
-          <>
-            {can('student.import') && (
-              <Link to="/buku-induk/import" className="btn-secondary btn-sm">
-                <FileSpreadsheet size={15} />
-                Import Excel
-              </Link>
-            )}
-            <Link to="/pembayaran" className="btn-primary btn-sm">
-              <CreditCard size={15} />
-              Pembayaran
-            </Link>
-          </>
-        }
       />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {metrics.totalStudents === 0 ? (
-          <CardSkeleton count={4} />
+          <CardSkeleton count={2} />
         ) : (
           <>
             <StatCard
@@ -447,28 +431,12 @@ export default function Dashboard() {
               delay={0}
             />
             <StatCard
-              icon={BookOpen}
-              tone="slate"
-              label="Total Tagihan"
-              value={formatCurrency(metrics.totalBilling)}
-              hint="Akumulasi tagihan tahunan seluruh siswa"
-              delay={0.05}
-            />
-            <StatCard
               icon={CircleDollarSign}
               tone="green"
               label="Total Pembayaran"
               value={formatCurrency(metrics.totalPaid)}
               hint={`${formatNumber(metrics.totalTransactions)} transaksi tercatat`}
-              delay={0.1}
-            />
-            <StatCard
-              icon={Wallet}
-              tone="amber"
-              label="Total Piutang"
-              value={formatCurrency(metrics.totalPiutang)}
-              hint={`Collection rate ${formatPercent(metrics.collectionRate)}`}
-              delay={0.15}
+              delay={0.05}
             />
           </>
         )}

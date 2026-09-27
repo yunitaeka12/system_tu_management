@@ -8,6 +8,7 @@
 import { getDB, commit, hashPassword, verifyPassword } from '../lib/db';
 import { uid } from '../utils/helpers';
 import { supabase, isSupabaseAuthEnabled } from '../lib/supabase';
+import { clearAllUiState } from '../lib/uiState';
 
 const SESSION_KEY = 'assalam.tu.session';
 
@@ -415,6 +416,9 @@ function clearSession() {
   } catch {
     /* diabaikan */
   }
+  // Ikut bersihkan preferensi tampilan (filter/pencarian daftar) agar pengguna
+  // berikutnya mulai dari tampilan default, bukan filter milik pengguna lama.
+  clearAllUiState();
 }
 
 /**

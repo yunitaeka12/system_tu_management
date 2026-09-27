@@ -9,7 +9,11 @@
  */
 import { getDB, commit } from '../lib/db';
 import { uid, normalizeText } from '../utils/helpers';
-import { getAcademicYearFromNoInduk } from '../utils/paymentCalculator';
+import {
+  getAcademicYearFromNoInduk,
+  isMutasiStudent,
+  STUDENT_STATUS,
+} from '../utils/paymentCalculator';
 
 const DEFAULT_ORDER = { field: 'nama_lengkap', direction: 'asc' };
 
@@ -18,6 +22,8 @@ export function normalizeStudent(student = {}) {
   const emptyParent = { nama: null, tahun_lahir: null, nik: null, agama: null, pendidikan: null, penghasilan: null, pekerjaan: null };
   return {
     ...student,
+    // Field kosong dianggap "aktif" agar data lama tetap terhitung.
+    status_siswa: student.status_siswa || STUDENT_STATUS.AKTIF,
     father: { ...emptyParent, ...(student.father || {}) },
     mother: { ...emptyParent, ...(student.mother || {}) },
     guardian: {
@@ -62,6 +68,7 @@ export function listStudents({
   rombel = '',
   jenisKelamin = '',
   tahunAjaran = '',
+  statusSiswa = '',
   page = 1,
   pageSize = 10,
   order = DEFAULT_ORDER,
@@ -88,6 +95,11 @@ export function listStudents({
   if (kelas) filtered = filtered.filter((s) => s.kelas === kelas);
   if (rombel) filtered = filtered.filter((s) => String(s.rombel) === String(rombel));
   if (jenisKelamin) filtered = filtered.filter((s) => s.jenis_kelamin === jenisKelamin);
+  if (statusSiswa === STUDENT_STATUS.MUTASI) {
+    filtered = filtered.filter(isMutasiStudent);
+  } else if (statusSiswa === STUDENT_STATUS.AKTIF) {
+    filtered = filtered.filter((s) => !isMutasiStudent(s));
+  }
   if (tahunAjaran) {
     filtered = filtered.filter(
       (s) => getAcademicYearFromNoInduk(s.no_induk)?.prefix === tahunAjaran,
@@ -303,6 +315,7 @@ export function bulkDelete({ kelas = '', tahunAjaran = '', mode = 'students' } =
 /** Statistik ringkas Buku Induk. */
 export function getStudentStats() {
   const students = getDB().students || [];
+  const mutasi = students.filter(isMutasiStudent).length;
   const byKelas = {};
   students.forEach((s) => {
     const key = s.kelas || 'Tanpa Kelas';
@@ -310,6 +323,8 @@ export function getStudentStats() {
   });
   return {
     total: students.length,
+    aktif: students.length - mutasi,
+    mutasi,
     lakiLaki: students.filter((s) => s.jenis_kelamin === 'Laki-laki').length,
     perempuan: students.filter((s) => s.jenis_kelamin === 'Perempuan').length,
     totalKelas: Object.keys(byKelas).length,

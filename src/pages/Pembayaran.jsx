@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, CreditCard, Eye, Filter, Search, Trash2, Wallet, X } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState';
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
 import { useDashboardMetrics, usePayments } from '../hooks/usePayments';
 import { useFilterOptions } from '../hooks/useStudents';
+import { useSessionState } from '../hooks/useSessionState';
 import { deleteStudentPayments } from '../services/paymentService';
 import { useAuth } from '../context/AuthContext';
 import { confirmDialog, toast } from '../lib/toast';
@@ -81,14 +82,19 @@ export default function Pembayaran() {
   const { kelas: kelasOptions, tahunAjaran: tahunAjaranOptions } = useFilterOptions();
   const metrics = useDashboardMetrics();
 
-  const [search, setSearch] = useState('');
-  const [tahunAjaran, setTahunAjaran] = useState('');
-  const [kelas, setKelas] = useState('');
-  const [status, setStatus] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [order, setOrder] = useState({ field: 'nama_lengkap', direction: 'asc' });
-  const [showFilters, setShowFilters] = useState(false);
+  // Filter & pagination diingat selama sesi tab supaya tidak hilang setelah
+  // membuka detail siswa lalu kembali ke halaman ini.
+  const [search, setSearch] = useSessionState('pembayaran.search', '');
+  const [tahunAjaran, setTahunAjaran] = useSessionState('pembayaran.tahunAjaran', '');
+  const [kelas, setKelas] = useSessionState('pembayaran.kelas', '');
+  const [status, setStatus] = useSessionState('pembayaran.status', '');
+  const [page, setPage] = useSessionState('pembayaran.page', 1);
+  const [pageSize, setPageSize] = useSessionState('pembayaran.pageSize', 10);
+  const [order, setOrder] = useSessionState('pembayaran.order', {
+    field: 'nama_lengkap',
+    direction: 'asc',
+  });
+  const [showFilters, setShowFilters] = useSessionState('pembayaran.showFilters', false);
 
   const { data, total, totalPages, isSearching } = usePayments({
     search,

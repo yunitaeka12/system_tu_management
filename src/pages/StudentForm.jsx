@@ -12,13 +12,19 @@ import { getFilterOptions } from '../services/studentService';
 import { toast } from '../lib/toast';
 import { validateStudentForm } from '../utils/validation';
 import { formatCurrency } from '../utils/currency';
-import { getAnnualFee, getMonthlyFee } from '../utils/paymentCalculator';
+import {
+  getAnnualFee,
+  getMonthlyFee,
+  STUDENT_STATUS,
+  STUDENT_STATUS_LABEL,
+} from '../utils/paymentCalculator';
 import { cn } from '../utils/helpers';
 
 const emptyForm = {
   no_urut: '',
   rombel: '',
   kelas: '',
+  status_siswa: STUDENT_STATUS.AKTIF,
   no_induk: '',
   nisn: '',
   nama_lengkap: '',
@@ -282,6 +288,24 @@ export default function StudentForm({ mode = 'create' }) {
             </Select>
           </FormField>
           <TextField form={form} setField={setField} name="rombel" label="Rombel" />
+          <FormField
+            label="Status Siswa"
+            htmlFor="status_siswa"
+            hint="Status Mutasi dikecualikan dari seluruh tagihan & laporan"
+          >
+            <Select
+              id="status_siswa"
+              value={form.status_siswa || STUDENT_STATUS.AKTIF}
+              onChange={(e) => setField('status_siswa', e.target.value)}
+              className="input"
+            >
+              {Object.entries(STUDENT_STATUS_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </FormField>
           <FormField label="Jenis Kelamin" htmlFor="jenis_kelamin">
             <Select
               id="jenis_kelamin"

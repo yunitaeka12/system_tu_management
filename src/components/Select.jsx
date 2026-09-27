@@ -20,6 +20,10 @@ function collectOptions(children, out = []) {
   return out;
 }
 
+/** Daftar selalu turun ke bawah; tingginya dibatasi agar tetap muat layar. */
+const MENU_MAX_HEIGHT = 256;
+const MENU_MIN_HEIGHT = 140;
+
 /**
  * Dropdown custom dengan animasi buka/tutup dan panah yang berputar.
  *
@@ -40,11 +44,19 @@ export default function Select({
   ariaLabel,
 }) {
   const [open, setOpen] = useState(false);
-  const [dropUp, setDropUp] = useState(false);
+  const [menuMaxHeight, setMenuMaxHeight] = useState(MENU_MAX_HEIGHT);
   const ref = useRef(null);
 
   const options = useMemo(() => collectOptions(children), [children]);
   const selected = options.find((option) => String(option.value) === String(value ?? '')) || null;
+
+  /** Tinggi maksimum daftar = sisa ruang di bawah tombol (dibatasi 256px). */
+  const measureMenuHeight = () => {
+    if (!ref.current) return MENU_MAX_HEIGHT;
+    const rect = ref.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - 16;
+    return Math.min(MENU_MAX_HEIGHT, Math.max(MENU_MIN_HEIGHT, spaceBelow));
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -54,11 +66,17 @@ export default function Select({
     const onKey = (event) => {
       if (event.key === 'Escape') setOpen(false);
     };
+    // Hitung ulang saat halaman di-scroll / jendela diubah ukurannya.
+    const onReposition = () => setMenuMaxHeight(measureMenuHeight());
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
     return () => {
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
     };
   }, [open]);
 
@@ -68,13 +86,12 @@ export default function Select({
     setOpen(false);
   };
 
-  // Buka ke atas bila ruang di bawah sempit (mis. select di bagian bawah kartu).
+  // Daftar selalu terbuka ke bawah. Kalau ruang di bawah sempit (mis. baris
+  // filter berada di bagian bawah layar), tingginya dipotong dan sisa opsi
+  // dapat di-scroll — bukan dibalik ke atas.
   const toggleOpen = () => {
     const next = !open;
-    if (next && ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      setDropUp(window.innerHeight - rect.bottom < 260 && rect.top > 260);
-    }
+    if (next) setMenuMaxHeight(measureMenuHeight());
     setOpen(next);
   };
 
@@ -110,9 +127,9 @@ export default function Select({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+            style={{ maxHeight: menuMaxHeight }}
             className={cn(
-              'absolute z-50 max-h-64 w-full overflow-auto rounded-xl border p-1 shadow-dropdown',
-              dropUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
+              'absolute top-full z-50 mt-1.5 w-full overflow-auto rounded-xl border p-1 shadow-dropdown',
               dark
                 ? 'border-white/10 bg-slate-900 text-slate-100'
                 : 'border-slate-200 bg-white text-slate-700',

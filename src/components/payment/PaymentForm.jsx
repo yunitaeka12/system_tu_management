@@ -26,7 +26,7 @@ import {
   periodFromStart,
 } from '../../utils/paymentCalculator';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '../../utils/currency';
-import { cn } from '../../utils/helpers';
+import { cn, uid } from '../../utils/helpers';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -53,6 +53,9 @@ export default function PaymentForm({
   totalBilled = null,
   showEkskul = false,
   ekskulOptions = [],
+  // Bagian pembayaran lain-lain: dimatikan saat modal Edit satu transaksi
+  // karena pembayaran lain dicatat lewat halaman Add Pembayaran.
+  showLain = true,
   submitting = false,
   onSubmit,
   onCancel,
@@ -77,14 +80,13 @@ export default function PaymentForm({
     initialValues?.ekskul_nominal ? String(initialValues.ekskul_nominal) : '',
   );
   // Pembayaran lain-lain (opsional) — tidak mengurangi tagihan SPP.
-  const [showLain, setShowLain] = useState(false);
-  const [lainNominal, setLainNominal] = useState('');
-  const [lainKeterangan, setLainKeterangan] = useState('');
+  // Boleh lebih dari satu baris; tiap baris disimpan sebagai transaksi sendiri.
+  const [lainRows, setLainRows] = useState([]);
   const [error, setError] = useState('');
 
   const amount = parseCurrencyInput(nominal);
   const ekskulAmount = parseCurrencyInput(ekskulNominal);
-  const lainAmount = parseCurrencyInput(lainNominal);
+  const lainAmount = lainRows.reduce((sum, row) => sum + parseCurrencyInput(row.nominal), 0);
   const selectedEkskul = ekskulOptions.find((item) => item.nama === ekskulNama) || null;
 
   // Pilih ekskul → nominal otomatis mengikuti biaya bulanannya.
@@ -93,6 +95,15 @@ export default function PaymentForm({
     const found = ekskulOptions.find((item) => item.nama === value);
     setEkskulNominal(found ? String(found.biaya) : '');
   };
+
+  // Baris pembayaran lain-lain: tambah / ubah / hapus.
+  const addLainRow = () =>
+    setLainRows((rows) => [...rows, { id: uid('lain'), nominal: '', keterangan: '' }]);
+
+  const updateLainRow = (id, patch) =>
+    setLainRows((rows) => rows.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+
+  const removeLainRow = (id) => setLainRows((rows) => rows.filter((row) => row.id !== id));
 
   // Pratinjau dihitung ulang setiap nominal / bulan berubah.
   const previewData = useMemo(
@@ -204,8 +215,13 @@ export default function PaymentForm({
       excludePaymentId,
       ekskulNama,
       ekskulNominal: ekskulNama ? ekskulAmount : 0,
-      lainNominal: lainAmount,
-      lainKeterangan,
+      // Baris pembayaran lain yang nominalnya terisi (> 0) saja yang disimpan.
+      lainItems: lainRows
+        .map((row) => ({
+          nominal: parseCurrencyInput(row.nominal),
+          keterangan: row.keterangan.trim(),
+        }))
+        .filter((item) => item.nominal > 0),
     });
   };
 
@@ -459,79 +475,102 @@ export default function PaymentForm({
       )}
 
       {/* Pembayaran lain-lain — opsional, tidak mengurangi tagihan SPP */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Pembayaran Lain
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Untuk pembayaran di luar SPP (seragam, kegiatan, dll.) — tercatat di peta bulanan &
-              riwayat, tanpa mengurangi tagihan SPP.
-            </p>
+      {showLain && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Pembayaran Lain
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Untuk pembayaran di luar SPP (seragam, kegiatan, dll.) — tercatat di peta bulanan &
+                riwayat, tanpa mengurangi tagihan SPP. Bisa diisi lebih dari satu.
+              </p>
+            </div>
+            {lainAmount > 0 && (
+              <span className="badge bg-primary-50 text-primary-700 ring-1 ring-primary-100">
+                Total {formatCurrency(lainAmount)}
+              </span>
+            )}
           </div>
-          {!showLain && (
-            <button
-              type="button"
-              onClick={() => setShowLain(true)}
-              className="btn-secondary btn-sm"
-            >
-              <Plus size={15} />
-              Pembayaran Lain
-            </button>
+
+          {lainRows.length > 0 && (
+            <div className="mt-3 space-y-3">
+              {lainRows.map((row, index) => (
+                <div
+                  key={row.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Pembayaran Lain #{index + 1}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => removeLainRow(row.id)}
+                      className="btn-ghost btn-sm text-red-600 hover:bg-red-50"
+                      aria-label={`Hapus pembayaran lain #${index + 1}`}
+                    >
+                      <X size={14} />
+                      Hapus
+                    </button>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                      label="Nominal Pembayaran Lain"
+                      htmlFor={`lain_nominal_${row.id}`}
+                      hint={
+                        parseCurrencyInput(row.nominal) > 0
+                          ? formatCurrency(parseCurrencyInput(row.nominal))
+                          : 'Di luar tagihan SPP'
+                      }
+                    >
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                          Rp
+                        </span>
+                        <input
+                          id={`lain_nominal_${row.id}`}
+                          type="text"
+                          inputMode="numeric"
+                          value={formatCurrencyInput(row.nominal)}
+                          onChange={(e) =>
+                            updateLainRow(row.id, {
+                              nominal: String(parseCurrencyInput(e.target.value)),
+                            })
+                          }
+                          placeholder="0"
+                          className="input pl-10 font-semibold"
+                        />
+                      </div>
+                    </FormField>
+
+                    <FormField
+                      label="Keterangan Pembayaran"
+                      htmlFor={`lain_keterangan_${row.id}`}
+                    >
+                      <input
+                        id={`lain_keterangan_${row.id}`}
+                        type="text"
+                        value={row.keterangan}
+                        onChange={(e) => updateLainRow(row.id, { keterangan: e.target.value })}
+                        placeholder="mis. Seragam olahraga"
+                        className="input"
+                      />
+                    </FormField>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-          {showLain && (
-            <button
-              type="button"
-              onClick={() => {
-                setShowLain(false);
-                setLainNominal('');
-                setLainKeterangan('');
-              }}
-              className="btn-ghost btn-sm"
-            >
-              <X size={15} />
-              Hapus
-            </button>
-          )}
+
+          <button type="button" onClick={addLainRow} className="btn-secondary btn-sm mt-3">
+            <Plus size={15} />
+            Pembayaran Lain
+          </button>
         </div>
-
-        {showLain && (
-          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField
-              label="Nominal Pembayaran Lain"
-              htmlFor="lain_nominal"
-              hint={lainAmount > 0 ? formatCurrency(lainAmount) : 'Di luar tagihan SPP'}
-            >
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                  Rp
-                </span>
-                <input
-                  id="lain_nominal"
-                  type="text"
-                  inputMode="numeric"
-                  value={formatCurrencyInput(lainNominal)}
-                  onChange={(e) => setLainNominal(String(parseCurrencyInput(e.target.value)))}
-                  placeholder="0"
-                  className="input pl-10 font-semibold"
-                />
-              </div>
-            </FormField>
-
-            <FormField label="Keterangan Pembayaran" htmlFor="lain_keterangan">
-              <input
-                id="lain_keterangan"
-                type="text"
-                value={lainKeterangan}
-                onChange={(e) => setLainKeterangan(e.target.value)}
-                placeholder="mis. Seragam olahraga"
-                className="input"
-              />
-            </FormField>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Peringatan */}
       <AnimatePresence>

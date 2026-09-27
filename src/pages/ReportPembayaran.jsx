@@ -19,6 +19,7 @@ import Pagination from '../components/Pagination';
 import EmptyState from '../components/EmptyState';
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
 import { useFilterOptions } from '../hooks/useStudents';
+import { useSessionState } from '../hooks/useSessionState';
 import { usePaymentReport } from '../hooks/usePayments';
 import { getPaymentReport } from '../services/paymentService';
 import { toast } from '../lib/toast';
@@ -59,13 +60,15 @@ function PeriodBreakdown({ periods }) {
 export default function ReportPembayaran() {
   const { kelas: kelasOptions, tahunAjaran: tahunAjaranOptions } = useFilterOptions();
 
-  const [search, setSearch] = useState('');
-  const [tahunAjaran, setTahunAjaran] = useState('');
-  const [kelas, setKelas] = useState('');
-  const [status, setStatus] = useState('');
-  const [all, setAll] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  // Filter & pagination diingat selama sesi tab supaya tidak hilang setelah
+  // membuka detail siswa lalu kembali ke halaman ini.
+  const [search, setSearch] = useSessionState('report.search', '');
+  const [tahunAjaran, setTahunAjaran] = useSessionState('report.tahunAjaran', '');
+  const [kelas, setKelas] = useSessionState('report.kelas', '');
+  const [status, setStatus] = useSessionState('report.status', '');
+  const [all, setAll] = useSessionState('report.all', false);
+  const [page, setPage] = useSessionState('report.page', 1);
+  const [pageSize, setPageSize] = useSessionState('report.pageSize', 10);
   const [expanded, setExpanded] = useState(null);
 
   const report = usePaymentReport({

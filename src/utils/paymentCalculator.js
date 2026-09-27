@@ -76,6 +76,31 @@ export const PAYMENT_STATUS = {
   BELUM: 'belum',
 };
 
+/**
+ * Status siswa pada Buku Induk.
+ * Siswa berstatus "mutasi" tidak lagi dihitung dalam tagihan sekolah mana pun
+ * (dashboard, laporan, rekap pembayaran, dsb).
+ */
+export const STUDENT_STATUS = {
+  AKTIF: 'aktif',
+  MUTASI: 'mutasi',
+};
+
+export const STUDENT_STATUS_LABEL = {
+  aktif: 'Aktif',
+  mutasi: 'Mutasi',
+};
+
+/** True bila siswa berstatus mutasi (field kosong dianggap aktif). */
+export function isMutasiStudent(student) {
+  return student?.status_siswa === STUDENT_STATUS.MUTASI;
+}
+
+/** True bila siswa masih aktif (bukan mutasi). */
+export function isActiveStudent(student) {
+  return !isMutasiStudent(student);
+}
+
 export const PAYMENT_STATUS_LABEL = {
   lunas: 'Lunas',
   sebagian: 'Sebagian Dibayar',

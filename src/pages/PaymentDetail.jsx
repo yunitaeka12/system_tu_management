@@ -491,6 +491,8 @@ export default function PaymentDetail() {
             adjustedMonths={adjustedMonthsFor(studentId, editingPeriodStart)}
             periodStart={editingPeriodStart}
             totalBilled={summary.feePerPeriod}
+            // Pembayaran lain dicatat lewat halaman Add Pembayaran, bukan saat mengedit.
+            showLain={false}
             excludePaymentId={editing.id}
             preview={({ bulan, nominal }) =>
               previewPayment({

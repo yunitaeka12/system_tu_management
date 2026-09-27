@@ -21,6 +21,7 @@ import {
   summarizeStudent,
   summarizeLastSpp,
   getPaymentStatus,
+  isMutasiStudent,
   PAYMENT_STATUS,
 } from '../utils/paymentCalculator';
 import { getEkskulIndex } from './ekskulService';
@@ -180,7 +181,8 @@ export function listPaymentRows({
   order = { field: 'nama_lengkap', direction: 'asc' },
 } = {}) {
   const db = getDB();
-  const students = db.students || [];
+  // Siswa berstatus mutasi tidak diikutkan dalam rekap pembayaran.
+  const students = (db.students || []).filter((s) => !isMutasiStudent(s));
   const payments = db.payments || [];
   const keyword = normalizeText(search);
   const digits = String(search || '').replace(/\D/g, '');
@@ -465,7 +467,8 @@ export function getPaymentReport({
   const keyword = normalizeText(search);
   const digits = String(search || '').replace(/\D/g, '');
 
-  let rows = (db.students || []).map((student) => {
+  // Siswa berstatus mutasi dikecualikan dari report pembayaran.
+  let rows = (db.students || []).filter((s) => !isMutasiStudent(s)).map((student) => {
     const owned = (db.payments || []).filter((p) => p.student_id === student.id);
     const ownedAdjustments = adjustments.filter((a) => a.student_id === student.id);
     const summary = summarizeStudent(student, owned, ownedAdjustments);
@@ -590,7 +593,10 @@ export function getPaymentReport({
 /** Metrik utama dashboard: tagihan, pembayaran, piutang, status. */
 export function getDashboardMetrics() {
   const db = getDB();
-  const students = db.students || [];
+  const allStudents = db.students || [];
+  // Siswa mutasi tidak dihitung dalam tagihan/pembayaran dashboard.
+  const students = allStudents.filter((s) => !isMutasiStudent(s));
+  const mutasi = allStudents.length - students.length;
   const payments = db.payments || [];
 
   let totalBilling = 0;
@@ -613,6 +619,7 @@ export function getDashboardMetrics() {
 
   return {
     totalStudents: students.length,
+    mutasi,
     totalBilling,
     totalPaid,
     totalPiutang,
@@ -629,7 +636,11 @@ export function getDashboardMetrics() {
 /** Data chart pembayaran per bulan (Januari–Desember). */
 export function getMonthlyPaymentChart() {
   const db = getDB();
-  const payments = db.payments || [];
+  // Transaksi milik siswa mutasi tidak dihitung di grafik penerimaan.
+  const activeIds = new Set(
+    (db.students || []).filter((s) => !isMutasiStudent(s)).map((s) => s.id),
+  );
+  const payments = (db.payments || []).filter((p) => activeIds.has(p.student_id));
   return MONTHS.map((bulan) => {
     const items = payments.filter((p) => p.bulan === bulan);
     return {
@@ -644,7 +655,10 @@ export function getMonthlyPaymentChart() {
 /** Aktivitas pembayaran terbaru (join dengan siswa). */
 export function getRecentPayments(limit = 6) {
   const db = getDB();
-  const payments = db.payments || [];
+  const activeIds = new Set(
+    (db.students || []).filter((s) => !isMutasiStudent(s)).map((s) => s.id),
+  );
+  const payments = (db.payments || []).filter((p) => activeIds.has(p.student_id));
   return [...payments]
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .slice(0, limit)
@@ -662,7 +676,7 @@ export function getRecentPayments(limit = 6) {
 /** Insight per kelas untuk dashboard. */
 export function getPaymentInsightByClass(limit = 6) {
   const db = getDB();
-  const students = db.students || [];
+  const students = (db.students || []).filter((s) => !isMutasiStudent(s));
   const payments = db.payments || [];
   const map = new Map();
 
@@ -693,6 +707,7 @@ export function getTopOutstandingStudents(limit = 5) {
   const db = getDB();
   const payments = db.payments || [];
   return (db.students || [])
+    .filter((student) => !isMutasiStudent(student))
     .map((student) => {
       const summary = summarizeStudent(student, payments, db.payment_adjustments || []);
       return {

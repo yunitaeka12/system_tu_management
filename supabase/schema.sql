@@ -61,6 +61,9 @@ create table if not exists public.students (
   berat_badan numeric,
   lingkar_kepala numeric,
   keterangan text,
+  -- Status siswa: 'aktif' (dihitung dalam tagihan) atau 'mutasi' (dikecualikan
+  -- dari seluruh perhitungan tagihan & laporan pembayaran).
+  status_siswa text not null default 'aktif',
   father jsonb,
   mother jsonb,
   guardian jsonb,
@@ -69,7 +72,11 @@ create table if not exists public.students (
   updated_at timestamptz default now()
 );
 
+-- Untuk database yang sudah ada sebelumnya (idempotent).
+alter table public.students add column if not exists status_siswa text not null default 'aktif';
+
 create index if not exists students_kelas_idx on public.students (kelas);
+create index if not exists students_status_idx on public.students (status_siswa);
 create index if not exists students_no_induk_idx on public.students (no_induk);
 create index if not exists students_nama_idx on public.students (nama_lengkap);
 

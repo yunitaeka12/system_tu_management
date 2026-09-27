@@ -8,9 +8,9 @@ dan panel administrator. Dibangun dengan React + Vite, data tersimpan di
 
 | Modul | Isi |
 | --- | --- |
-| **Dashboard** | Ringkasan tagihan, pembayaran, piutang, chart per bulan, insight per kelas |
-| **Buku Induk** | Master data 1.200+ siswa, pencarian, filter kelas/rombel/tahun ajaran, import & export Excel, serta kelola ekskul siswa + riwayat pembayarannya per tanggal |
-| **Pembayaran** | Pencatatan SPP per bulan — sekaligus bisa memilih ekskul & mencatat bayar ekskul (opsional) dan **Pembayaran Lain** (nominal + keterangan), peta warna bulanan gabungan SPP+ekskul (merah/kuning/hijau) dengan **filter periode tahun ajaran (Juli–Juni)** dan keterangan tunggakan per periode, kolom **SPP Terakhir**, **Adjustment** untuk pembayaran yang sudah tercatat di pembukuan sebelumnya, riwayat gabungan + pagination |
+| **Dashboard** | Ringkasan tagihan, pembayaran, piutang, **jumlah siswa Mutasi**, chart per bulan, insight per kelas |
+| **Buku Induk** | Master data 1.200+ siswa, pencarian, filter kelas/rombel/tahun ajaran/**status**, import & export Excel, status siswa **Aktif/Mutasi**, serta kelola ekskul siswa + riwayat pembayarannya per tanggal |
+| **Pembayaran** | Pencatatan SPP per bulan — sekaligus bisa memilih ekskul & mencatat bayar ekskul (opsional) dan **Pembayaran Lain** (nominal + keterangan, bisa lebih dari satu baris), peta warna bulanan gabungan SPP+ekskul (merah/kuning/hijau) dengan **filter periode tahun ajaran (Juli–Juni)** dan keterangan tunggakan per periode, kolom **SPP Terakhir**, **Adjustment** untuk pembayaran yang sudah tercatat di pembukuan sebelumnya, riwayat gabungan + pagination |
 | **Report Pembayaran** | Rekap seluruh siswa: total tagihan, sudah dibayar, sisa tagihan, tunggakan per periode tahun ajaran, plus riwayat bayar tiap siswa; filter tahun ajaran/kelas/status dengan pilihan tampil semua data atau per halaman, dan **Export Excel** (sheet rekap + riwayat) |
 | **Pengaturan** | Ubah tarif SPP per angkatan dan biaya tiap ekskul (plus tambah/hapus angkatan & ekskul) |
 | **Admin Panel** | Kelola pengguna (termasuk role **Guru**), hak akses menu dan tindakan per role/pengguna, pengaturan kewajiban authenticator per pengguna (**Administrator selalu wajib**), **Bulk Adjust** (tandai bulan/periode yang sudah dibayar di pembukuan lama untuk satu angkatan/kelas sekaligus), hapus massal per kelas/tahun ajaran (tema gelap) |
@@ -230,6 +230,9 @@ dihitung ulang) sehingga aman dijalankan berulang.
 
 Di form **Pembayaran** ada tombol **+ Pembayaran Lain** yang memunculkan dua
 kolom: **Nominal** dan **Keterangan Pembayaran** (mis. “Seragam olahraga”).
+Tombol ini **tetap tampil di bawah baris** yang sudah ada, sehingga dalam satu
+kali simpan bisa dicatat **lebih dari satu** pembayaran lain (tiap baris punya
+tombol **Hapus** sendiri dan disimpan sebagai transaksi terpisah).
 Pembayaran ini:
 
 - **tidak mengurangi tagihan SPP** (tidak mempengaruhi sisa tagihan maupun
@@ -271,6 +274,38 @@ tahun ajaran (angkatan), total tagihan, sudah dibayar, sisa tagihan, dan status.
   **History Bayar** siswa tersebut (SPP, ekskul, pembayaran lain, adjustment).
 - Tombol **Export Excel** mengunduh dua sheet: *Rekap Pembayaran* (termasuk
   kolom “Tunggakan per Periode” dan “Bulan Tunggakan”) dan *Riwayat Pembayaran*.
+
+### 1h. Status siswa: Aktif / Mutasi
+
+Setiap siswa di Buku Induk punya **Status Siswa** yang bisa diubah lewat form
+Tambah/Edit Siswa (field **Status Siswa**):
+
+- **Aktif** (bawaan) — dihitung normal dalam seluruh tagihan & laporan.
+- **Mutasi** — siswa pindah/keluar, sehingga **dikecualikan dari semua
+  perhitungan keuangan**: tidak masuk total tagihan sekolah, dashboard, grafik
+  penerimaan, insight per kelas, piutang terbesar, tabel Pembayaran, maupun
+  Report Pembayaran. Datanya tetap tersimpan di Buku Induk (ditandai badge
+  *Mutasi*) agar riwayat tidak hilang.
+
+Dashboard menampilkan card **Siswa Mutasi** berisi jumlah siswa berstatus
+mutasi. Filter **Status Siswa** juga tersedia di toolbar Buku Induk.
+
+### 1i. Filter yang diingat antar-halaman
+
+Pencarian, filter (tahun ajaran/kelas/rombel/jenis kelamin/status), jumlah baris
+per halaman, urutan kolom, dan posisi halaman pada **Pembayaran**, **Buku
+Induk**, serta **Report Pembayaran** disimpan selama sesi tab
+(`sessionStorage`). Jadi setelah membuka **detail siswa** lalu menekan
+**Kembali** (atau memuat ulang halaman), daftar tetap tampil dengan filter yang
+sama. Tekan **Reset** untuk mengembalikannya ke default.
+
+Filter tersimpan ini **otomatis dihapus saat logout** (juga saat sesi berakhir /
+kadaluarsa), sehingga pengguna berikutnya di perangkat yang sama selalu mulai
+dari tampilan default.
+
+Kolom baru `students.status_siswa` (`'aktif'` | `'mutasi'`, idempotent) —
+jalankan ulang [`supabase/schema.sql`](supabase/schema.sql) di **SQL Editor**
+agar kolomnya tersedia di Supabase.
 
 ### 1f. Periode tahun ajaran (Juli–Juni) pada Peta Bulanan
 

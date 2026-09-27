@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, Eye, FileSpreadsheet, Filter, Pencil, Plus, Trash2, UserPlus, X } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
@@ -8,11 +8,17 @@ import Select from '../components/Select';
 import Pagination from '../components/Pagination';
 import EmptyState from '../components/EmptyState';
 import { useFilterOptions, useStudents } from '../hooks/useStudents';
+import { useSessionState } from '../hooks/useSessionState';
 import { deleteStudent } from '../services/studentService';
 import { useAuth } from '../context/AuthContext';
 import { confirmDialog, toast } from '../lib/toast';
 import { formatNumber } from '../utils/currency';
 import { cn } from '../utils/helpers';
+import {
+  STUDENT_STATUS,
+  STUDENT_STATUS_LABEL,
+  isMutasiStudent,
+} from '../utils/paymentCalculator';
 
 function GenderPill({ value }) {
   if (!value) return <span className="text-slate-400">-</span>;
@@ -25,6 +31,22 @@ function GenderPill({ value }) {
       )}
     >
       {isMale ? 'L' : 'P'}
+    </span>
+  );
+}
+
+function StatusPill({ student }) {
+  const mutasi = isMutasiStudent(student);
+  return (
+    <span
+      className={cn(
+        'badge',
+        mutasi
+          ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+          : 'bg-school-50 text-school-700 ring-1 ring-school-200',
+      )}
+    >
+      {mutasi ? STUDENT_STATUS_LABEL.mutasi : STUDENT_STATUS_LABEL.aktif}
     </span>
   );
 }
@@ -74,15 +96,21 @@ export default function BukuInduk() {
     tahunAjaran: tahunAjaranOptions,
   } = useFilterOptions();
 
-  const [search, setSearch] = useState('');
-  const [tahunAjaran, setTahunAjaran] = useState('');
-  const [kelas, setKelas] = useState('');
-  const [rombel, setRombel] = useState('');
-  const [jenisKelamin, setJenisKelamin] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [order, setOrder] = useState({ field: 'nama_lengkap', direction: 'asc' });
-  const [showFilters, setShowFilters] = useState(false);
+  // Filter & pagination diingat selama sesi tab supaya tidak hilang setelah
+  // membuka detail siswa lalu kembali ke halaman ini.
+  const [search, setSearch] = useSessionState('bukuInduk.search', '');
+  const [tahunAjaran, setTahunAjaran] = useSessionState('bukuInduk.tahunAjaran', '');
+  const [kelas, setKelas] = useSessionState('bukuInduk.kelas', '');
+  const [rombel, setRombel] = useSessionState('bukuInduk.rombel', '');
+  const [jenisKelamin, setJenisKelamin] = useSessionState('bukuInduk.jenisKelamin', '');
+  const [statusSiswa, setStatusSiswa] = useSessionState('bukuInduk.statusSiswa', '');
+  const [page, setPage] = useSessionState('bukuInduk.page', 1);
+  const [pageSize, setPageSize] = useSessionState('bukuInduk.pageSize', 10);
+  const [order, setOrder] = useSessionState('bukuInduk.order', {
+    field: 'nama_lengkap',
+    direction: 'asc',
+  });
+  const [showFilters, setShowFilters] = useSessionState('bukuInduk.showFilters', false);
 
   const { data, total, totalPages, isSearching } = useStudents({
     search,
@@ -90,12 +118,13 @@ export default function BukuInduk() {
     kelas,
     rombel,
     jenisKelamin,
+    statusSiswa,
     page,
     pageSize,
     order,
   });
 
-  const activeFilters = [tahunAjaran, kelas, rombel, jenisKelamin].filter(Boolean).length;
+  const activeFilters = [tahunAjaran, kelas, rombel, jenisKelamin, statusSiswa].filter(Boolean).length;
 
   const resetPage = (setter) => (value) => {
     setter(value);
@@ -107,6 +136,7 @@ export default function BukuInduk() {
     setKelas('');
     setRombel('');
     setJenisKelamin('');
+    setStatusSiswa('');
     setSearch('');
     setPage(1);
   };
@@ -162,6 +192,12 @@ export default function BukuInduk() {
       },
       { key: 'kelas', header: 'Kelas', sortable: true },
       { key: 'rombel', header: 'Rombel', sortable: true, render: (row) => row.rombel || <span className="text-slate-400">-</span> },
+      {
+        key: 'status_siswa',
+        header: 'Status',
+        align: 'center',
+        render: (row) => <StatusPill student={row} />,
+      },
       {
         key: 'jenis_kelamin',
         header: 'JK',
@@ -310,6 +346,21 @@ export default function BukuInduk() {
                   <option value="Perempuan">Perempuan</option>
                 </Select>
               </div>
+              <div>
+                <label htmlFor="filter-status" className="label">
+                  Status Siswa
+                </label>
+                <Select
+                  id="filter-status"
+                  value={statusSiswa}
+                  onChange={(e) => resetPage(setStatusSiswa)(e.target.value)}
+                  className="input"
+                >
+                  <option value="">Semua Status</option>
+                  <option value={STUDENT_STATUS.AKTIF}>{STUDENT_STATUS_LABEL.aktif}</option>
+                  <option value={STUDENT_STATUS.MUTASI}>{STUDENT_STATUS_LABEL.mutasi}</option>
+                </Select>
+              </div>
             </div>
           )}
         </div>
@@ -359,6 +410,7 @@ export default function BukuInduk() {
               <div className="mt-2 flex items-center gap-2">
                 <span className="stat-chip">Kelas {row.kelas}</span>
                 <span className="stat-chip">Rombel {row.rombel || '-'}</span>
+                <StatusPill student={row} />
               </div>
             </Link>
           )}

@@ -33,6 +33,7 @@ import { useAuth } from '../context/AuthContext';
 import { confirmDialog, toast } from '../lib/toast';
 import { formatCurrency, formatPercent } from '../utils/currency';
 import { cn, formatDate, initials } from '../utils/helpers';
+import { isMutasiStudent, STUDENT_STATUS_LABEL } from '../utils/paymentCalculator';
 
 const TABS = [
   { key: 'identitas', label: 'Identitas Siswa', icon: IdCard },
@@ -370,6 +371,18 @@ export default function StudentDetail() {
                     No Induk {student.no_induk}
                   </span>
                   <span className="stat-chip">Kelas {student.kelas}</span>
+                  <span
+                    className={cn(
+                      'badge',
+                      isMutasiStudent(student)
+                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                        : 'bg-school-50 text-school-700 ring-1 ring-school-200',
+                    )}
+                  >
+                    {isMutasiStudent(student)
+                      ? STUDENT_STATUS_LABEL.mutasi
+                      : STUDENT_STATUS_LABEL.aktif}
+                  </span>
                 </div>
               </div>
             </div>
@@ -427,6 +440,14 @@ export default function StudentDetail() {
                   <DetailItem label="Rombel" value={student.rombel} />
                   <DetailItem label="Kelas" value={student.kelas} />
                   <DetailItem label="No Induk" value={student.no_induk} mono />
+                  <DetailItem
+                    label="Status Siswa"
+                    value={
+                      isMutasiStudent(student)
+                        ? STUDENT_STATUS_LABEL.mutasi
+                        : STUDENT_STATUS_LABEL.aktif
+                    }
+                  />
                   <DetailItem label="NISN" value={student.nisn} mono />
                   <DetailItem label="Nama Lengkap" value={student.nama_lengkap} />
                   <DetailItem label="Nama Panggilan" value={student.nama_panggilan} />

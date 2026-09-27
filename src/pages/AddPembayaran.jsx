@@ -151,25 +151,26 @@ export default function AddPembayaran() {
       }
     }
 
-    // Pembayaran lain-lain (opsional) — dicatat sebagai transaksi terpisah dan
-    // tidak mengurangi tagihan SPP.
-    if (Number(values.lainNominal) > 0) {
+    // Pembayaran lain-lain (opsional) — tiap baris dicatat sebagai transaksi
+    // terpisah dan tidak mengurangi tagihan SPP.
+    const lainItems = (values.lainItems || []).filter((item) => Number(item.nominal) > 0);
+    lainItems.forEach((item) => {
       const lainResult = addPayment({
         studentId,
         bulan: values.bulan,
         tahun: values.tahun,
-        nominal: values.lainNominal,
+        nominal: item.nominal,
         jenis: 'lain',
         tanggalBayar: values.tanggalBayar,
-        keterangan: values.lainKeterangan || 'Pembayaran lain-lain',
+        keterangan: item.keterangan || 'Pembayaran lain-lain',
         createdBy: session?.name || 'Tata Usaha',
       });
       if (lainResult.ok) {
-        toast.success(`Pembayaran lain ${formatCurrency(values.lainNominal)} berhasil disimpan.`);
+        toast.success(`Pembayaran lain ${formatCurrency(item.nominal)} berhasil disimpan.`);
       } else {
         toast.error(lainResult.error || 'Gagal menyimpan pembayaran lain.');
       }
-    }
+    });
 
     setSubmitting(false);
     toast.success('Pembayaran berhasil disimpan.');

@@ -22,6 +22,7 @@ import {
   CreditCard,
   FileSpreadsheet,
   TrendingUp,
+  UserMinus,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -417,9 +418,9 @@ export default function Dashboard() {
       />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {metrics.totalStudents === 0 ? (
-          <CardSkeleton count={2} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {metrics.totalStudents === 0 && metrics.mutasi === 0 ? (
+          <CardSkeleton count={3} />
         ) : (
           <>
             <StatCard
@@ -437,6 +438,14 @@ export default function Dashboard() {
               value={formatCurrency(metrics.totalPaid)}
               hint={`${formatNumber(metrics.totalTransactions)} transaksi tercatat`}
               delay={0.05}
+            />
+            <StatCard
+              icon={UserMinus}
+              tone="amber"
+              label="Siswa Mutasi"
+              value={formatNumber(metrics.mutasi)}
+              hint="Tidak dihitung dalam tagihan sekolah"
+              delay={0.1}
             />
           </>
         )}

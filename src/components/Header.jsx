@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight, LogOut, Menu, UserRound } from 'lucide-react';
 import SyncStatus from './SyncStatus';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { confirmDialog, toast } from '../lib/toast';
 import { cn, initials } from '../utils/helpers';
 
@@ -21,6 +22,9 @@ const LABELS = {
 
 function useBreadcrumb() {
   const { pathname } = useLocation();
+  const { can } = useAuth();
+  const { version } = useData();
+  const canViewDashboard = useMemo(() => can('menu.dashboard'), [can, version]);
   const parts = pathname.split('/').filter(Boolean);
   const crumbs = [{ label: 'Dashboard', to: '/' }];
 
@@ -35,7 +39,9 @@ function useBreadcrumb() {
 }
 
 function UserMenu() {
-  const { user, roleLabel, logout } = useAuth();
+  const { user, roleLabel, logout, can } = useAuth();
+  const { version } = useData();
+  const canViewProfile = useMemo(() => can('menu.profile'), [can, version]);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
@@ -94,14 +100,16 @@ function UserMenu() {
               <p className="truncate text-xs text-slate-500">{user?.email}</p>
             </div>
             <div className="p-1.5">
-              <Link
-                to="/profil"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                <UserRound size={16} />
-                Profil & Akun
-              </Link>
+              {canViewProfile && (
+                <Link
+                  to="/profil"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <UserRound size={16} />
+                  Profil & Akun
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={handleLogout}
@@ -140,8 +148,10 @@ export default function Header({ onOpenMobile }) {
               return (
                 <li key={crumb.to} className="flex min-w-0 items-center gap-1.5">
                   {index > 0 && <ChevronRight size={14} className="shrink-0 text-slate-300" />}
-                  {isLast ? (
-                    <span className="truncate font-semibold text-slate-800">{crumb.label}</span>
+                  {isLast || (crumb.to === '/' && !canViewDashboard) ? (
+                    <span className={cn('truncate', isLast ? 'font-semibold text-slate-800' : 'text-slate-500')}>
+                      {crumb.label}
+                    </span>
                   ) : (
                     <Link
                       to={crumb.to}

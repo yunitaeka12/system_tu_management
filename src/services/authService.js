@@ -3,7 +3,7 @@
  *
  * Password disimpan sebagai hash SHA-256 + salt (tidak pernah plain text).
  * Struktur role sengaja dibuat array agar mudah ditambah
- * (administrator, tu, kepala_sekolah, bendahara).
+ * (administrator, tu, kepala_sekolah, bendahara, guru).
  */
 import { getDB, commit, hashPassword, verifyPassword } from '../lib/db';
 import { uid } from '../utils/helpers';
@@ -72,6 +72,7 @@ export const ROLES = {
   TU: 'tu',
   KEPALA_SEKOLAH: 'kepala_sekolah',
   BENDAHARA: 'bendahara',
+  GURU: 'guru',
 };
 
 export const ROLE_LABELS = {
@@ -79,6 +80,7 @@ export const ROLE_LABELS = {
   tu: 'Tata Usaha',
   kepala_sekolah: 'Kepala Sekolah',
   bendahara: 'Bendahara',
+  guru: 'Guru',
 };
 
 export const ROLE_KEYS = Object.keys(ROLE_LABELS);
@@ -86,6 +88,12 @@ export const ROLE_KEYS = Object.keys(ROLE_LABELS);
 /** Hak akses bawaan per role (masih bisa diubah dari Admin Panel). */
 export const DEFAULT_PERMISSIONS = {
   administrator: [
+    'menu.dashboard',
+    'menu.students',
+    'menu.payments',
+    'menu.report',
+    'menu.settings',
+    'menu.profile',
     'student.view',
     'student.create',
     'student.update',
@@ -99,6 +107,11 @@ export const DEFAULT_PERMISSIONS = {
     'settings.manage',
   ],
   tu: [
+    'menu.dashboard',
+    'menu.students',
+    'menu.payments',
+    'menu.report',
+    'menu.profile',
     'student.view',
     'student.create',
     'student.update',
@@ -108,12 +121,50 @@ export const DEFAULT_PERMISSIONS = {
     'payment.update',
     'payment.delete',
   ],
-  bendahara: ['student.view', 'payment.view', 'payment.create', 'payment.update'],
-  kepala_sekolah: ['student.view', 'payment.view'],
+  bendahara: [
+    'menu.dashboard',
+    'menu.payments',
+    'menu.report',
+    'menu.profile',
+    'student.view',
+    'payment.view',
+    'payment.create',
+    'payment.update',
+  ],
+  kepala_sekolah: [
+    'menu.dashboard',
+    'menu.students',
+    'menu.payments',
+    'menu.report',
+    'menu.profile',
+    'student.view',
+    'payment.view',
+  ],
+  guru: [
+    'menu.dashboard',
+    'menu.students',
+    'menu.payments',
+    'menu.report',
+    'menu.profile',
+    'student.view',
+    'student.create',
+    'student.update',
+    'student.import',
+    'payment.view',
+    'payment.create',
+    'payment.update',
+    'payment.delete',
+  ],
 };
 
 /** Daftar seluruh permission yang dikenal sistem. */
 export const ALL_PERMISSIONS = [
+  { key: 'menu.dashboard', label: 'Dashboard', group: 'Menu' },
+  { key: 'menu.students', label: 'Buku Induk', group: 'Menu' },
+  { key: 'menu.payments', label: 'Pembayaran', group: 'Menu' },
+  { key: 'menu.report', label: 'Report Pembayaran', group: 'Menu' },
+  { key: 'menu.settings', label: 'Pengaturan', group: 'Menu' },
+  { key: 'menu.profile', label: 'Profil & Akun', group: 'Menu' },
   { key: 'student.view', label: 'Lihat Buku Induk', group: 'Buku Induk' },
   { key: 'student.create', label: 'Tambah siswa', group: 'Buku Induk' },
   { key: 'student.update', label: 'Ubah data siswa', group: 'Buku Induk' },
@@ -132,9 +183,21 @@ export const ALL_PERMISSIONS = [
  * Administrator); bila belum pernah diubah, memakai default di atas.
  */
 export function getRolePermissions(role) {
-  const stored = getDB().role_permissions?.[role];
-  if (Array.isArray(stored)) return stored;
-  return DEFAULT_PERMISSIONS[role] || [];
+  const db = getDB();
+  const synced = db.meta?.role_permissions?.[role];
+  if (Array.isArray(synced)) return synced;
+
+  const legacy = db.role_permissions?.[role];
+  if (!Array.isArray(legacy)) return DEFAULT_PERMISSIONS[role] || [];
+
+  // Pengaturan lama belum mengenal izin menu. Tambahkan default menu secara
+  // virtual agar perubahan izin fitur yang sudah disimpan administrator tetap.
+  return [
+    ...new Set([
+      ...legacy,
+      ...(DEFAULT_PERMISSIONS[role] || []).filter((key) => key.startsWith('menu.')),
+    ]),
+  ];
 }
 
 /** Seluruh matriks hak akses yang berlaku saat ini. */
@@ -153,7 +216,9 @@ export function setRolePermission(role, permission, enabled) {
     : current.filter((item) => item !== permission);
 
   commit((draft) => {
-    draft.role_permissions = { ...(draft.role_permissions || {}), [role]: next };
+    const rolePermissions = { ...(draft.meta?.role_permissions || draft.role_permissions || {}), [role]: next };
+    draft.role_permissions = rolePermissions;
+    draft.meta = { ...(draft.meta || {}), role_permissions: rolePermissions };
   });
   return { ok: true, permissions: next };
 }
@@ -162,6 +227,7 @@ export function setRolePermission(role, permission, enabled) {
 export function resetRolePermissions() {
   commit((draft) => {
     draft.role_permissions = {};
+    draft.meta = { ...(draft.meta || {}), role_permissions: {} };
   });
   return { ok: true };
 }
@@ -384,6 +450,7 @@ function saveSession(user, authMethod = 'password') {
     role: user.role,
     auth_user_id: user.auth_user_id ?? null,
     auth_provider: user.auth_provider || 'email',
+    require_authenticator: user.require_authenticator !== false,
     auth_method: authMethod,
     must_change_password: user.must_change_password !== false,
     logged_in_at: new Date().toISOString(),
@@ -423,6 +490,11 @@ export function getPendingMfa() {
       localStorage.removeItem(PENDING_KEY);
       return null;
     }
+    const pendingUser = getUser(parsed.userId) || findUserByEmail(parsed.email);
+    if (pendingUser && !requiresAuthenticator(pendingUser)) {
+      localStorage.removeItem(PENDING_KEY);
+      return null;
+    }
     return parsed;
   } catch {
     return null;
@@ -441,6 +513,11 @@ function clearPendingMfa() {
 function findUserByEmail(email) {
   const normalized = String(email || '').trim().toLowerCase();
   return (getDB().users || []).find((u) => String(u.email).toLowerCase() === normalized) || null;
+}
+
+/** Authenticator tetap wajib secara default; hanya di-skip untuk override false. */
+function requiresAuthenticator(user) {
+  return user?.role === ROLES.ADMINISTRATOR || user?.require_authenticator !== false;
 }
 
 /**
@@ -644,6 +721,15 @@ export async function login(email, password) {
 
     resetLoginAttempts(normalizedEmail);
 
+    // Administrator dapat menonaktifkan syarat authenticator untuk akun non-admin ini.
+    // Faktor yang sudah terdaftar tetap ada; bila diwajibkan lagi, dipakai ulang.
+    if (!requiresAuthenticator(user)) {
+      clearPendingMfa();
+      const linked = markLogin(user, data.user);
+      const session = saveSession(linked, 'password');
+      return { ok: true, session, user: linked };
+    }
+
     // Langkah kedua: kode dari aplikasi authenticator. Sesi aplikasi baru
     // dibuat setelah kode diverifikasi (lihat verifyTotp / startTotpEnrollment).
     const mfa = await describeMfaState();
@@ -836,10 +922,16 @@ export async function restoreSession() {
   if (!isSupabaseAuthEnabled) return stored;
 
   // Login dua langkah yang belum selesai: jangan pulihkan sesi walau sesi
-  // password Supabase masih hidup di browser.
-  if (getPendingMfa()) {
-    clearSession();
-    return null;
+  // password Supabase masih hidup di browser, kecuali Admin baru saja
+  // menonaktifkan kewajiban authenticator akun tersebut.
+  const pendingMfa = getPendingMfa();
+  if (pendingMfa) {
+    const pendingUser = getUser(pendingMfa.userId) || findUserByEmail(pendingMfa.email);
+    if (requiresAuthenticator(pendingUser)) {
+      clearSession();
+      return null;
+    }
+    clearPendingMfa();
   }
 
   let authUser = await readAuthUser();
@@ -859,22 +951,25 @@ export async function restoreSession() {
     return null;
   }
 
-  // Punya authenticator tapi kodenya belum diverifikasi (masih aal1) → tolak.
-  try {
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
-      clearSession();
-      return null;
-    }
-  } catch {
-    /* diabaikan — bila API MFA tidak tersedia, lanjut memakai sesi biasa */
-  }
-
   const user = resolveAuthUser(authUser);
   if (!user || user.is_active === false) {
     await supabase.auth.signOut();
     clearSession();
     return null;
+  }
+
+  // Bila authenticator diwajibkan, akun berfaktor TOTP harus sudah di AAL2.
+  // Override per pengguna false hanya melewati pemeriksaan aplikasi ini.
+  if (requiresAuthenticator(user)) {
+    try {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+        clearSession();
+        return null;
+      }
+    } catch {
+      /* diabaikan — bila API MFA tidak tersedia, lanjut memakai sesi biasa */
+    }
   }
 
   if (stored && String(stored.user_id) === String(user.id)) return stored;
@@ -1039,7 +1134,7 @@ export async function verifyUserPassword(userId, password) {
   return valid ? { ok: true } : { ok: false, error: 'Password salah.' };
 }
 
-export async function createUser({ name, email, role, password, permissions }) {
+export async function createUser({ name, email, role, password, permissions, require_authenticator = true }) {
   const db = getDB();
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (!name || !name.trim()) return { ok: false, error: 'Nama pengguna wajib diisi.' };
@@ -1082,6 +1177,7 @@ export async function createUser({ name, email, role, password, permissions }) {
     is_active: true,
     auth_user_id: authUserId,
     auth_provider: 'email',
+    require_authenticator: role === ROLES.ADMINISTRATOR ? true : Boolean(require_authenticator),
     permission_overrides: permissions && Object.keys(permissions).length ? permissions : null,
     created_at: new Date().toISOString(),
     last_login_at: null,
@@ -1111,6 +1207,10 @@ export function updateUser(id, payload) {
     name: payload.name?.trim() || current.name,
     email: normalizedEmail,
     role: payload.role ?? current.role,
+    require_authenticator:
+      (payload.role ?? current.role) === ROLES.ADMINISTRATOR
+        ? true
+        : payload.require_authenticator ?? current.require_authenticator ?? true,
     is_active: payload.is_active ?? current.is_active ?? true,
     updated_at: new Date().toISOString(),
   };
@@ -1168,6 +1268,22 @@ export async function resetUserPassword(id, newPassword = DEFAULT_PASSWORD) {
     }
   });
   resetLoginAttempts(current.email);
+  return { ok: true };
+}
+
+export function setUserAuthenticatorRequired(id, required) {
+  const current = getUser(id);
+  if (!current) return { ok: false, error: 'Pengguna tidak ditemukan.' };
+  if (current.role === ROLES.ADMINISTRATOR && !required) {
+    return { ok: false, error: 'Authenticator selalu wajib untuk Administrator.' };
+  }
+  commit((draft) => {
+    const target = (draft.users || []).find((user) => user.id === id);
+    if (target) {
+      target.require_authenticator = Boolean(required);
+      target.updated_at = new Date().toISOString();
+    }
+  });
   return { ok: true };
 }
 

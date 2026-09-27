@@ -299,7 +299,7 @@ export default function Login() {
             {step === 'mfa'
               ? 'Satu langkah lagi — masukkan kode dari aplikasi authenticator Anda.'
               : isSupabaseAuthEnabled
-                ? 'Masuk dengan password, lalu konfirmasi kode dari aplikasi authenticator.'
+                ? 'Masuk dengan email dan password akun Anda.'
                 : 'Gunakan akun Tata Usaha untuk mengakses sistem.'}
           </p>
 

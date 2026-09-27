@@ -53,9 +53,18 @@ function PublicOnlyRoute({ children }) {
  * Batasi halaman berdasarkan hak akses. Mencegah pengguna yang hanya boleh
  * melihat data membuka halaman tambah/ubah/import lewat URL langsung.
  */
-function RequirePermission({ permission, children }) {
+function RequirePermission({ permission, permissions, children }) {
   const { can } = useAuth();
-  if (!can(permission)) {
+  const required = permissions || (permission ? [permission] : []);
+  const fallback = [
+    ['/', 'Dashboard', ['menu.dashboard']],
+    ['/buku-induk', 'Buku Induk', ['menu.students', 'student.view']],
+    ['/pembayaran', 'Pembayaran', ['menu.payments', 'payment.view']],
+    ['/report', 'Report Pembayaran', ['menu.report', 'payment.view']],
+    ['/pengaturan', 'Pengaturan', ['menu.settings', 'settings.manage']],
+    ['/profil', 'Profil & Akun', ['menu.profile']],
+  ].find(([, , access]) => access.every((item) => can(item)));
+  if (required.some((item) => !can(item))) {
     return (
       <div className="card card-pad text-center">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg bg-slate-100 text-slate-400">
@@ -66,10 +75,12 @@ function RequirePermission({ permission, children }) {
           Akun Anda tidak memiliki hak untuk menambah atau mengubah data. Hubungi Administrator bila
           memang membutuhkannya.
         </p>
-        <Link to="/" className="btn-primary mt-5 inline-flex">
-          <ArrowLeft size={16} />
-          Kembali ke Dashboard
-        </Link>
+        {fallback && (
+          <Link to={fallback[0]} className="btn-primary mt-5 inline-flex">
+            <ArrowLeft size={16} />
+            Kembali ke {fallback[1]}
+          </Link>
+        )}
       </div>
     );
   }
@@ -103,12 +114,26 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/buku-induk" element={<BukuInduk />} />
+        <Route
+          path="/"
+          element={
+            <RequirePermission permission="menu.dashboard">
+              <Dashboard />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="/buku-induk"
+          element={
+            <RequirePermission permissions={['menu.students', 'student.view']}>
+              <BukuInduk />
+            </RequirePermission>
+          }
+        />
         <Route
           path="/buku-induk/import"
           element={
-            <RequirePermission permission="student.import">
+            <RequirePermission permissions={['menu.students', 'student.import']}>
               <ImportBukuInduk />
             </RequirePermission>
           }
@@ -116,34 +141,55 @@ function AppRoutes() {
         <Route
           path="/buku-induk/baru"
           element={
-            <RequirePermission permission="student.create">
+            <RequirePermission permissions={['menu.students', 'student.create']}>
               <StudentForm mode="create" />
             </RequirePermission>
           }
         />
-        <Route path="/buku-induk/:id" element={<StudentDetail />} />
+        <Route
+          path="/buku-induk/:id"
+          element={
+            <RequirePermission permissions={['menu.students', 'student.view']}>
+              <StudentDetail />
+            </RequirePermission>
+          }
+        />
         <Route
           path="/buku-induk/:id/edit"
           element={
-            <RequirePermission permission="student.update">
+            <RequirePermission permissions={['menu.students', 'student.update']}>
               <StudentForm mode="edit" />
             </RequirePermission>
           }
         />
-        <Route path="/pembayaran" element={<Pembayaran />} />
+        <Route
+          path="/pembayaran"
+          element={
+            <RequirePermission permissions={['menu.payments', 'payment.view']}>
+              <Pembayaran />
+            </RequirePermission>
+          }
+        />
         <Route
           path="/pembayaran/:studentId/tambah"
           element={
-            <RequirePermission permission="payment.create">
+            <RequirePermission permissions={['menu.payments', 'payment.create']}>
               <AddPembayaran />
             </RequirePermission>
           }
         />
-        <Route path="/pembayaran/:studentId" element={<PaymentDetail />} />
+        <Route
+          path="/pembayaran/:studentId"
+          element={
+            <RequirePermission permissions={['menu.payments', 'payment.view']}>
+              <PaymentDetail />
+            </RequirePermission>
+          }
+        />
         <Route
           path="/report"
           element={
-            <RequirePermission permission="payment.view">
+            <RequirePermission permissions={['menu.report', 'payment.view']}>
               <ReportPembayaran />
             </RequirePermission>
           }
@@ -152,12 +198,19 @@ function AppRoutes() {
         <Route
           path="/pengaturan"
           element={
-            <RequirePermission permission="settings.manage">
+            <RequirePermission permissions={['menu.settings', 'settings.manage']}>
               <Pengaturan />
             </RequirePermission>
           }
         />
-        <Route path="/profil" element={<Profile />} />
+        <Route
+          path="/profil"
+          element={
+            <RequirePermission permission="menu.profile">
+              <Profile />
+            </RequirePermission>
+          }
+        />
       </Route>
 
       <Route path="*" element={<NotFound />} />

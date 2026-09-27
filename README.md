@@ -13,7 +13,7 @@ dan panel administrator. Dibangun dengan React + Vite, data tersimpan di
 | **Pembayaran** | Pencatatan SPP per bulan — sekaligus bisa memilih ekskul & mencatat bayar ekskul (opsional) dan **Pembayaran Lain** (nominal + keterangan), peta warna bulanan gabungan SPP+ekskul (merah/kuning/hijau) dengan **filter periode tahun ajaran (Juli–Juni)** dan keterangan tunggakan per periode, kolom **SPP Terakhir**, **Adjustment** untuk pembayaran yang sudah tercatat di pembukuan sebelumnya, riwayat gabungan + pagination |
 | **Report Pembayaran** | Rekap seluruh siswa: total tagihan, sudah dibayar, sisa tagihan, tunggakan per periode tahun ajaran, plus riwayat bayar tiap siswa; filter tahun ajaran/kelas/status dengan pilihan tampil semua data atau per halaman, dan **Export Excel** (sheet rekap + riwayat) |
 | **Pengaturan** | Ubah tarif SPP per angkatan dan biaya tiap ekskul (plus tambah/hapus angkatan & ekskul) |
-| **Admin Panel** | Kelola pengguna, hak akses per role & per pengguna, **Bulk Adjust** (tandai bulan/periode yang sudah dibayar di pembukuan lama untuk satu angkatan/kelas sekaligus), hapus massal per kelas/tahun ajaran (tema gelap) |
+| **Admin Panel** | Kelola pengguna (termasuk role **Guru**), hak akses menu dan tindakan per role/pengguna, pengaturan kewajiban authenticator per pengguna (**Administrator selalu wajib**), **Bulk Adjust** (tandai bulan/periode yang sudah dibayar di pembukuan lama untuk satu angkatan/kelas sekaligus), hapus massal per kelas/tahun ajaran (tema gelap) |
 | **Keamanan** | Login 3x salah → akun terkunci, popup ganti password, verifikasi password tiap 3 jam, auto logout 1 menit |
 
 ## Menjalankan
@@ -112,11 +112,28 @@ satu langkah (mode lokal).
 5. **Login berikutnya**: password → kode 6 angka dari aplikasi tersebut. Sesi
    Supabase naik ke **aal2** setelah kode benar, dan aplikasi menolak memulihkan
    sesi selama kode belum diverifikasi (anti-bypass refresh).
-6. Batas 3x salah password / salah kode tetap berlaku (penghitung di browser).
+6. Di **Admin Panel → Pengguna**, Administrator dapat mengatur **Wajibkan authenticator**
+   untuk setiap akun non-Administrator. Jika dimatikan, akun tersebut bisa login
+   dengan email + password tanpa kode; faktor TOTP yang sudah terdaftar **tetap
+   disimpan** dan dapat dipakai lagi jika diwajibkan kembali. Akun baru secara
+   default tetap diwajibkan memakai authenticator. Akun Administrator tidak bisa
+   dikecualikan dan selalu tetap wajib authenticator.
+7. Role **Guru** tersedia dengan hak akses bawaan yang sama seperti Tata Usaha;
+   Administrator dapat menyempitkan akses Guru di tab **Hak Akses**.
+8. Batas 3x salah password / salah kode tetap berlaku (penghitung di browser).
    Langkah 2 yang belum selesai batal sendiri setelah 15 menit.
-7. **Lupa HP / HP hilang**: Administrator menghapus faktor TOTP akun tersebut
+9. **Lupa HP / HP hilang**: Administrator menghapus faktor TOTP akun tersebut
    dari **Supabase → Authentication → Users → (pilih user) → Factor**, lalu
    pengguna mendaftarkan authenticator baru saat login berikutnya.
+
+> Pengaturan “Wajibkan authenticator” melewati langkah TOTP di alur aplikasi
+> saja—tidak menghapus faktor dan tidak menonaktifkan MFA secara global di
+> Supabase. Jika RLS Anda mewajibkan JWT `aal2`, akun yang MFA-nya dimatikan
+> tetap tidak bisa mengakses kebijakan tersebut dengan sesi `aal1`; sesuaikan
+> kebijakan hanya setelah menimbang dampak keamanannya.
+
+Untuk database yang sudah ada, jalankan ulang `supabase/schema.sql` agar kolom
+`users.require_authenticator` ditambahkan (perintahnya idempotent).
 
 > Alur password (popup “ganti password”, konfirmasi tiap 3 jam) tetap berlaku
 > karena semua pengguna login dengan password. Login Google/Microsoft juga masih

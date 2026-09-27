@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -14,14 +15,15 @@ import {
 } from 'lucide-react';
 import Logo from './Logo';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { confirmDialog, toast } from '../lib/toast';
 import { cn, initials } from '../utils/helpers';
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/buku-induk', label: 'Buku Induk', icon: BookOpen },
-  { to: '/pembayaran', label: 'Pembayaran', icon: CreditCard },
-  { to: '/report', label: 'Report Pembayaran', icon: FileSpreadsheet, permission: 'payment.view' },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true, permissions: ['menu.dashboard'] },
+  { to: '/buku-induk', label: 'Buku Induk', icon: BookOpen, permissions: ['menu.students', 'student.view'] },
+  { to: '/pembayaran', label: 'Pembayaran', icon: CreditCard, permissions: ['menu.payments', 'payment.view'] },
+  { to: '/report', label: 'Report Pembayaran', icon: FileSpreadsheet, permissions: ['menu.report', 'payment.view'] },
 ];
 
 function NavItem({ item, collapsed, onNavigate }) {
@@ -175,9 +177,16 @@ function SidebarContent({
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
   const { user, roleLabel, logout, isAdministrator, can } = useAuth();
-  const canSettings = can('settings.manage');
+  const { version } = useData();
+  const canSettings = useMemo(
+    () => can('menu.settings') && can('settings.manage'),
+    [can, version],
+  );
   const navigate = useNavigate();
-  const navItems = NAV_ITEMS.filter((item) => !item.permission || can(item.permission));
+  const navItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.permissions.every((permission) => can(permission))),
+    [can, version],
+  );
 
   const handleLogout = async () => {
     const confirmed = await confirmDialog({

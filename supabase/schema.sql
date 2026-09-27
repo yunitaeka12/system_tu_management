@@ -86,6 +86,8 @@ create table if not exists public.users (
   password_hash text not null default '',
   must_change_password boolean default true,
   is_active boolean default true,
+  -- Bila false, aplikasi melewati permintaan TOTP tanpa menghapus faktor Auth.
+  require_authenticator boolean not null default true,
   permission_overrides jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz,
@@ -100,6 +102,7 @@ create table if not exists public.users (
 -- Untuk database yang sudah ada sebelumnya (idempotent).
 alter table public.users add column if not exists auth_user_id uuid unique;
 alter table public.users add column if not exists auth_provider text default 'email';
+alter table public.users add column if not exists require_authenticator boolean not null default true;
 alter table public.payments add column if not exists jenis text not null default 'spp';
 
 -- ---------------------------------------------------------------------

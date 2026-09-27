@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Info, RotateCcw, ShieldCheck, UserCog } from 'lucide-react';
+import { Info, RotateCcw, Shield, ShieldCheck, UserCog } from 'lucide-react';
 import Select from '../Select';
 import { useData } from '../../context/DataContext';
 import {
@@ -11,6 +11,7 @@ import {
   listUsers,
   resetRolePermissions,
   setRolePermission,
+  setUserAuthenticatorRequired,
   setUserPermissionOverride,
 } from '../../services/authService';
 import { confirmDialog, toast } from '../../lib/toast';
@@ -64,6 +65,19 @@ export default function AdminPermissions() {
     toast.success('Hak akses khusus pengguna diperbarui.');
   };
 
+  const handleAuthenticatorChange = (required) => {
+    const result = setUserAuthenticatorRequired(selectedUserId, required);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(
+      required
+        ? `Authenticator diwajibkan untuk ${selectedUser.name}.`
+        : `Authenticator dimatikan untuk ${selectedUser.name}.`,
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       {/* Matriks per role */}
@@ -75,7 +89,7 @@ export default function AdminPermissions() {
               Hak Akses per Role
             </h3>
             <p className="mt-0.5 text-xs text-slate-400">
-              Atur apa saja yang boleh dilakukan setiap role.
+              Atur menu dan tindakan yang tersedia untuk setiap role. Admin Panel tetap khusus Administrator.
             </p>
           </div>
           <button type="button" onClick={handleReset} className="dark-btn-ghost dark-btn-sm">
@@ -155,7 +169,7 @@ export default function AdminPermissions() {
           Hak Akses Khusus Pengguna
         </h3>
         <p className="mt-0.5 text-xs text-slate-400">
-          Pengecualian untuk satu pengguna tertentu, menimpa aturan role-nya.
+          Pilih menu dan tindakan yang boleh atau tidak boleh dilakukan pengguna ini. “Ikut Role” memakai pengaturan role di sebelah kiri.
         </p>
 
         <div className="mt-4">
@@ -183,45 +197,79 @@ export default function AdminPermissions() {
             Pilih pengguna untuk mengatur pengecualian hak akses.
           </p>
         ) : (
-          <div className="mt-4 space-y-1.5">
-            {ALL_PERMISSIONS.map((item) => {
-              const overrides = selectedUser.permission_overrides || {};
-              const state =
-                typeof overrides[item.key] === 'boolean'
-                  ? overrides[item.key]
-                    ? 'allow'
-                    : 'deny'
-                  : 'inherit';
-              return (
-                <div
-                  key={item.key}
-                  className="flex flex-wrap items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3.5 py-2.5"
-                >
-                  <span className="min-w-0 flex-1 text-sm text-slate-200">{item.label}</span>
-                  <div className="flex gap-1">
-                    {OVERRIDE_STATES.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => handleOverride(item.key, option.value)}
-                        className={cn(
-                          'rounded-lg px-2.5 py-1 text-[11px] font-semibold transition',
-                          state === option.value
-                            ? option.value === 'deny'
-                              ? 'bg-red-500/80 text-white'
-                              : option.value === 'allow'
-                                ? 'bg-school-500/80 text-white'
-                                : 'bg-white/15 text-white'
-                            : 'bg-white/[0.04] text-slate-400 hover:bg-white/10',
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
+          <div className="mt-4 space-y-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
+              <div className="flex items-start gap-3">
+                <Shield size={16} className="mt-0.5 shrink-0 text-primary-300" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-100">Wajibkan authenticator</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-400">
+                    Jika dimatikan, pengguna login dengan email dan password. Faktor yang sudah terdaftar tetap disimpan.
+                  </p>
                 </div>
-              );
-            })}
+                <input
+                  type="checkbox"
+                  aria-label={`Wajibkan authenticator untuk ${selectedUser.name}`}
+                  checked={selectedUser.role === 'administrator' || selectedUser.require_authenticator !== false}
+                  disabled={selectedUser.role === 'administrator'}
+                  onChange={(event) => handleAuthenticatorChange(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-slate-800 accent-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+              {selectedUser.role === 'administrator' && (
+                <p className="mt-2 rounded-lg border border-primary-400/30 bg-primary-500/10 px-3 py-2 text-xs text-primary-100">
+                  Authenticator selalu wajib untuk Administrator dan tidak dapat dimatikan.
+                </p>
+              )}
+            </div>
+            {GROUPS.map((group) => (
+              <div key={group}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  {group}
+                </p>
+                <div className="space-y-1.5">
+                  {ALL_PERMISSIONS.filter((item) => item.group === group).map((item) => {
+                    const overrides = selectedUser.permission_overrides || {};
+                    const state =
+                      typeof overrides[item.key] === 'boolean'
+                        ? overrides[item.key]
+                          ? 'allow'
+                          : 'deny'
+                        : 'inherit';
+                    return (
+                      <div
+                        key={item.key}
+                        className="flex flex-wrap items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3.5 py-2.5"
+                      >
+                        <span className="min-w-0 flex-1 text-sm text-slate-200">{item.label}</span>
+                        <div className="flex gap-1">
+                          {OVERRIDE_STATES.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              disabled={selectedUser.role === 'administrator'}
+                              onClick={() => handleOverride(item.key, option.value)}
+                              className={cn(
+                                'rounded-lg px-2.5 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40',
+                                state === option.value
+                                  ? option.value === 'deny'
+                                    ? 'bg-red-500/80 text-white'
+                                    : option.value === 'allow'
+                                      ? 'bg-school-500/80 text-white'
+                                      : 'bg-white/15 text-white'
+                                  : 'bg-white/[0.04] text-slate-400 hover:bg-white/10',
+                              )}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

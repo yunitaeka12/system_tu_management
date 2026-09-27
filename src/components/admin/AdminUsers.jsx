@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   KeyRound,
+  Shield,
   LockOpen,
   Pencil,
   Plus,
@@ -25,6 +26,7 @@ import {
   listUsersWithStatus,
   resetUserPassword,
   setUserActive,
+  setUserAuthenticatorRequired,
   updateUser,
 } from '../../services/authService';
 import { confirmDialog, toast } from '../../lib/toast';
@@ -37,9 +39,16 @@ const ROLE_TONES = {
   tu: 'bg-school-500/15 text-school-200 ring-1 ring-school-400/30',
   kepala_sekolah: 'bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/30',
   bendahara: 'bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/30',
+  guru: 'bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-400/30',
 };
 
-const emptyForm = { name: '', email: '', role: 'tu', password: DEFAULT_PASSWORD };
+const emptyForm = {
+  name: '',
+  email: '',
+  role: 'tu',
+  password: DEFAULT_PASSWORD,
+  require_authenticator: true,
+};
 
 function StatusPill({ user }) {
   if (!user.isActive) {
@@ -90,7 +99,14 @@ export default function AdminUsers() {
   };
 
   const openEdit = (user) => {
-    setForm({ name: user.name, email: user.email, role: user.role, password: '' });
+    setForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      password: '',
+      require_authenticator:
+        user.role === 'administrator' || user.require_authenticator !== false,
+    });
     setFormModal({ mode: 'edit', user });
   };
 
@@ -133,6 +149,30 @@ export default function AdminUsers() {
     }
     if (result.warning) toast.warning(result.warning);
     else toast.success('Pengguna berhasil dihapus (termasuk akun login Supabase).');
+  };
+
+  const handleToggleAuthenticator = async (user) => {
+    const required = user.require_authenticator === false;
+    const confirmed = await confirmDialog({
+      title: required
+        ? `Wajibkan authenticator untuk ${user.name}?`
+        : `Matikan authenticator untuk ${user.name}?`,
+      text: required
+        ? 'Pengguna ini harus menggunakan kode authenticator saat login berikutnya.'
+        : 'Kode authenticator akan dilewati saat login. Faktor yang sudah terdaftar tetap tersimpan dan dapat digunakan lagi jika diwajibkan kembali.',
+      confirmText: required ? 'Ya, wajibkan' : 'Ya, matikan',
+    });
+    if (!confirmed) return;
+    const result = setUserAuthenticatorRequired(user.id, required);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(
+      required
+        ? 'Authenticator diwajibkan untuk pengguna.'
+        : 'Authenticator dimatikan untuk pengguna.',
+    );
   };
 
   const handleToggleActive = async (user) => {
@@ -255,12 +295,13 @@ export default function AdminUsers() {
       {/* Tabel pengguna */}
       <div className="dark-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px]">
+          <table className="w-full min-w-[980px]">
             <thead className="border-b border-white/10 bg-white/[0.03]">
               <tr>
                 <th className="dark-table-head">Pengguna</th>
                 <th className="dark-table-head">Role</th>
                 <th className="dark-table-head">Status</th>
+                <th className="dark-table-head">Authenticator</th>
                 <th className="dark-table-head">Login Terakhir</th>
                 <th className="dark-table-head text-right">Aksi</th>
               </tr>
@@ -289,6 +330,15 @@ export default function AdminUsers() {
                       </p>
                     )}
                   </td>
+                  <td className="dark-table-cell">
+                    {user.role === 'administrator' ? (
+                      <span className="dark-chip bg-primary-500/15 text-primary-200">Wajib (Admin)</span>
+                    ) : user.require_authenticator === false ? (
+                      <span className="dark-chip bg-slate-500/15 text-slate-300">Dimatikan</span>
+                    ) : (
+                      <span className="dark-chip bg-school-500/15 text-school-200">Wajib</span>
+                    )}
+                  </td>
                   <td className="dark-table-cell text-slate-400">
                     {user.last_login_at ? formatDate(user.last_login_at, { withTime: true }) : '-'}
                   </td>
@@ -313,6 +363,28 @@ export default function AdminUsers() {
                         }
                       >
                         {user.loginAttempt?.locked ? <LockOpen size={15} /> : <KeyRound size={15} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAuthenticator(user)}
+                        className="rounded-lg p-2 text-slate-400 transition hover:bg-primary-500/15 hover:text-primary-200 disabled:cursor-not-allowed disabled:opacity-40"
+                        title={
+                          user.role === 'administrator'
+                            ? 'Authenticator selalu wajib untuk Administrator'
+                            : user.require_authenticator === false
+                              ? 'Wajibkan authenticator'
+                              : 'Matikan authenticator'
+                        }
+                        aria-label={
+                          user.role === 'administrator'
+                            ? 'Authenticator selalu wajib untuk Administrator'
+                            : user.require_authenticator === false
+                              ? `Wajibkan authenticator untuk ${user.name}`
+                              : `Matikan authenticator untuk ${user.name}`
+                        }
+                        disabled={user.role === 'administrator'}
+                      >
+                        <Shield size={15} />
                       </button>
                       <button
                         type="button"
@@ -401,6 +473,25 @@ export default function AdminUsers() {
                 ))}
               </Select>
             </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+              <input
+                type="checkbox"
+                checked={form.role === 'administrator' || form.require_authenticator !== false}
+                disabled={form.role === 'administrator'}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, require_authenticator: event.target.checked }))
+                }
+                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-800 accent-primary-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-200">Wajibkan authenticator</span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  {form.role === 'administrator'
+                    ? 'Authenticator selalu wajib untuk Administrator.'
+                    : 'Jika dimatikan, login cukup dengan email dan password. Faktor yang sudah terdaftar tidak dihapus.'}
+                </span>
+              </span>
+            </label>
             {formModal.mode === 'add' && (
               <div>
                 <label htmlFor="admin-password" className="dark-label">

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Info, RotateCcw, ShieldCheck, UserCog } from 'lucide-react';
+import Select from '../Select';
 import { useData } from '../../context/DataContext';
 import {
   ALL_PERMISSIONS,
@@ -161,7 +162,8 @@ export default function AdminPermissions() {
           <label htmlFor="override-user" className="dark-label">
             Pilih Pengguna
           </label>
-          <select
+          <Select
+            dark
             id="override-user"
             value={selectedUserId}
             onChange={(e) => setSelectedUserId(e.target.value)}
@@ -173,7 +175,7 @@ export default function AdminPermissions() {
                 {user.name} — {ROLE_LABELS[user.role] ?? user.role}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {!selectedUser ? (

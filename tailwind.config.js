@@ -34,13 +34,18 @@ export default {
         sans: ['Inter', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)',
-        'card-hover': '0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -1px rgb(15 23 42 / 0.05)',
-        dropdown: '0 8px 24px -6px rgb(15 23 42 / 0.14)',
+        card: '0 1px 2px 0 rgb(15 23 42 / 0.04)',
+        'card-hover': '0 1px 3px 0 rgb(15 23 42 / 0.08)',
+        dropdown: '0 4px 12px -4px rgb(15 23 42 / 0.12)',
       },
+      // Skala radius dikecilkan agar tampilan tegas ala sistem administrasi.
       borderRadius: {
-        xl: '0.875rem',
-        '2xl': '1.125rem',
+        sm: '2px',
+        md: '4px',
+        lg: '5px',
+        xl: '6px',
+        '2xl': '8px',
+        '3xl': '10px',
       },
       keyframes: {
         shimmer: {

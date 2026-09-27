@@ -43,7 +43,7 @@ export default function AdminPanel() {
       {/* Header */}
       <div className="relative flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary-500 to-school-500 text-white shadow-lg shadow-primary-500/20">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary-600 text-white">
             <Database size={20} />
           </div>
           <div>

@@ -150,6 +150,48 @@ export function summarizeStudent(student, payments = []) {
   };
 }
 
+/**
+ * Sebar pembayaran SPP ke bulan-bulan secara berurutan (waterfall):
+ * kelebihan bayar pada satu bulan otomatis menutup bulan berikutnya.
+ *
+ * @param {Array<object>} payments - transaksi SPP siswa
+ * @param {number} monthlyFee - tagihan bulanan
+ * @param {{bulan: string, nominal: number}|null} extra - pembayaran tambahan (opsional)
+ * @returns {Array<{bulan, paid, carryIn, covered, carryOut, shortfall, isFull}>}
+ */
+export function buildMonthlyCoverage(payments = [], monthlyFee = 0, extra = null) {
+  const fee = Number(monthlyFee) || 0;
+  const tagged = new Map();
+  payments.forEach((payment) => {
+    tagged.set(
+      payment.bulan,
+      (tagged.get(payment.bulan) ?? 0) + (Number(payment.nominal_bayar) || 0),
+    );
+  });
+  if (extra?.bulan) {
+    tagged.set(extra.bulan, (tagged.get(extra.bulan) ?? 0) + (Number(extra.nominal) || 0));
+  }
+
+  let carry = 0;
+  return MONTHS.map((month) => {
+    const paid = tagged.get(month) ?? 0;
+    const available = carry + paid;
+    const covered = fee > 0 ? Math.min(available, fee) : available;
+    const carryOut = Math.max(available - fee, 0);
+    const row = {
+      bulan: month,
+      paid,
+      carryIn: available - paid,
+      covered,
+      carryOut,
+      shortfall: Math.max(fee - covered, 0),
+      isFull: fee > 0 ? available >= fee : available > 0,
+    };
+    carry = carryOut;
+    return row;
+  });
+}
+
 /** Keterangan otomatis berdasarkan status pembayaran. */
 export function buildKeterangan(totalPaid, annualFee) {
   const status = getPaymentStatus(totalPaid, annualFee);

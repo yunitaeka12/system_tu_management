@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Database, Filter, Trash2 } from 'lucide-react';
+import Select from '../Select';
 import { useFilterOptions } from '../../hooks/useStudents';
 import { bulkDelete, previewBulkDelete } from '../../services/studentService';
 import { confirmDialog, toast } from '../../lib/toast';
@@ -87,7 +88,8 @@ export default function AdminBulkDelete() {
             <label htmlFor="bulk-kelas" className="dark-label">
               Kelas
             </label>
-            <select
+            <Select
+              dark
               id="bulk-kelas"
               value={kelas}
               onChange={(e) => setKelas(e.target.value)}
@@ -99,13 +101,14 @@ export default function AdminBulkDelete() {
                   Kelas {item}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label htmlFor="bulk-tahun" className="dark-label">
               Tahun Ajaran
             </label>
-            <select
+            <Select
+              dark
               id="bulk-tahun"
               value={tahunAjaran}
               onChange={(e) => setTahunAjaran(e.target.value)}
@@ -117,7 +120,7 @@ export default function AdminBulkDelete() {
                   {item.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 

@@ -27,19 +27,19 @@ export default function StatCard({
       transition={{ duration: 0.25, delay, ease: 'easeOut' }}
       onClick={onClick}
       className={cn(
-        'card group relative overflow-hidden p-5 transition-shadow duration-200',
-        onClick && 'cursor-pointer hover:shadow-card-hover',
+        'card group relative p-4 transition-colors',
+        onClick && 'cursor-pointer hover:border-slate-300',
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-900">{value}</p>
-          {hint && <p className="mt-1.5 text-xs text-slate-500">{hint}</p>}
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="mt-1.5 truncate text-xl font-bold tracking-tight text-slate-900">{value}</p>
+          {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
         </div>
         {Icon && (
-          <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl ring-1', t.icon, t.ring)}>
-            <Icon size={20} strokeWidth={2.2} />
+          <div className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-md ring-1', t.icon, t.ring)}>
+            <Icon size={17} strokeWidth={2.2} />
           </div>
         )}
       </div>

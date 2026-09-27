@@ -10,7 +10,6 @@ import { cn, initials } from '../utils/helpers';
 const LABELS = {
   'buku-induk': 'Buku Induk',
   pembayaran: 'Pembayaran',
-  ekskul: 'Ekskul',
   admin: 'Admin Panel',
   pengaturan: 'Pengaturan',
   profil: 'Profil',
@@ -123,7 +122,7 @@ export default function Header({ onOpenMobile }) {
   const crumbs = useBreadcrumb();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
         <button
           type="button"

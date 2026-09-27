@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, CalendarDays, Info, Loader2, Save, Wallet } from 'lucide-react';
+import { AlertTriangle, Award, CalendarDays, Info, Loader2, Save, Wallet } from 'lucide-react';
 import FormField from '../FormField';
+import Select from '../Select';
 import PaymentStatusBadge from '../PaymentStatusBadge';
 import {
   MONTHS,
+  buildMonthlyCoverage,
   getAnnualFee,
   getMonthlyFee,
   getPaymentStatus,
@@ -26,6 +28,10 @@ export default function PaymentForm({
   initialValues = null,
   excludePaymentId = null,
   preview,
+  payments = [],
+  enrollments = [],
+  showEkskul = false,
+  ekskulOptions = [],
   submitting = false,
   onSubmit,
   onCancel,
@@ -42,9 +48,22 @@ export default function PaymentForm({
     initialValues?.tanggal_bayar ?? todayISO(),
   );
   const [keterangan, setKeterangan] = useState(initialValues?.keterangan ?? '');
+  const [ekskulNama, setEkskulNama] = useState(initialValues?.ekskul_nama ?? '');
+  const [ekskulNominal, setEkskulNominal] = useState(
+    initialValues?.ekskul_nominal ? String(initialValues.ekskul_nominal) : '',
+  );
   const [error, setError] = useState('');
 
   const amount = parseCurrencyInput(nominal);
+  const ekskulAmount = parseCurrencyInput(ekskulNominal);
+  const selectedEkskul = ekskulOptions.find((item) => item.nama === ekskulNama) || null;
+
+  // Pilih ekskul → nominal otomatis mengikuti biaya bulanannya.
+  const handleEkskulChange = (value) => {
+    setEkskulNama(value);
+    const found = ekskulOptions.find((item) => item.nama === value);
+    setEkskulNominal(found ? String(found.biaya) : '');
+  };
 
   // Pratinjau dihitung ulang setiap nominal / bulan berubah.
   const previewData = useMemo(
@@ -55,6 +74,58 @@ export default function PaymentForm({
   const projectedTotal = previewData?.projectedTotal ?? 0;
   const projectedStatus = getPaymentStatus(projectedTotal, annualFee);
   const projectedRemaining = Math.max(annualFee - projectedTotal, 0);
+
+  // Sebar pembayaran ke bulan secara berurutan (kelebihan menutup bulan berikutnya).
+  const existingPayments = useMemo(
+    () => payments.filter((payment) => payment.id !== excludePaymentId),
+    [payments, excludePaymentId],
+  );
+  const coverage = useMemo(
+    () => buildMonthlyCoverage(existingPayments, monthlyFee),
+    [existingPayments, monthlyFee],
+  );
+  const projectedCoverage = useMemo(
+    () =>
+      buildMonthlyCoverage(
+        existingPayments,
+        monthlyFee,
+        bulan && amount > 0 ? { bulan, nominal: amount } : null,
+      ),
+    [existingPayments, monthlyFee, bulan, amount],
+  );
+
+  const monthIndex = MONTHS.indexOf(bulan);
+  const monthCoverage = monthIndex >= 0 ? coverage[monthIndex] : null;
+  const newlyCovered = useMemo(
+    () =>
+      bulan
+        ? projectedCoverage
+            .filter((row, index) => row.isFull && !coverage[index].isFull)
+            .map((row) => row.bulan)
+        : [],
+    [projectedCoverage, coverage, bulan],
+  );
+
+  // Pembayaran ekskul yang sudah tercatat pada bulan terpilih.
+  const ekskulThisMonth = useMemo(() => {
+    if (!bulan) return [];
+    const list = [];
+    enrollments.forEach((enrollment) => {
+      (enrollment.payments || []).forEach((payment) => {
+        if (payment.bulan === bulan) {
+          list.push({
+            nama: enrollment.ekskul_nama,
+            nominal: Number(payment.nominal_bayar) || 0,
+          });
+        }
+      });
+    });
+    return list;
+  }, [enrollments, bulan]);
+
+  const ekskulDuplicate = ekskulNama
+    ? ekskulThisMonth.filter((item) => item.nama === ekskulNama)
+    : [];
 
   // Keterangan otomatis mengikuti status pembayaran — tetap bisa diubah.
   const [keteranganTouched, setKeteranganTouched] = useState(Boolean(initialValues?.keterangan));
@@ -88,6 +159,8 @@ export default function PaymentForm({
       tanggalBayar,
       keterangan,
       excludePaymentId,
+      ekskulNama,
+      ekskulNominal: ekskulNama ? ekskulAmount : 0,
     });
   };
 
@@ -139,7 +212,7 @@ export default function PaymentForm({
               size={16}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
             />
-            <select
+            <Select
               id="bulan"
               value={bulan}
               onChange={(e) => setBulan(e.target.value)}
@@ -151,7 +224,7 @@ export default function PaymentForm({
                   {month}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </FormField>
 
@@ -176,15 +249,24 @@ export default function PaymentForm({
               onClick={() => setNominal(String(monthlyFee))}
               className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-primary-300 hover:text-primary-600"
             >
-              {formatCurrency(monthlyFee)}
+              {formatCurrency(monthlyFee)} (1 bulan)
             </button>
+            {bulan && monthCoverage && !monthCoverage.isFull && (
+              <button
+                type="button"
+                onClick={() => setNominal(String(monthCoverage.shortfall))}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-primary-300 hover:text-primary-600"
+              >
+                Lunasi bulan {bulan} ({formatCurrency(monthCoverage.shortfall)})
+              </button>
+            )}
             {projectedRemaining > 0 && (
               <button
                 type="button"
                 onClick={() => setNominal(String(projectedRemaining))}
                 className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-primary-300 hover:text-primary-600"
               >
-                Lunasi sisa ({formatCurrency(projectedRemaining)})
+                Lunasi sisa tahun ({formatCurrency(projectedRemaining)})
               </button>
             )}
           </div>
@@ -214,6 +296,113 @@ export default function PaymentForm({
           />
         </FormField>
       </div>
+
+      {/* Status bulan terpilih — lunas/sisa + bulan yang ikut tertutup */}
+      {bulan && monthCoverage && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <CalendarDays size={14} />
+            Status Bulan {bulan}
+          </p>
+          <p
+            className={cn(
+              'text-sm font-medium',
+              monthCoverage.isFull ? 'text-school-700' : 'text-amber-700',
+            )}
+          >
+            {monthCoverage.isFull
+              ? 'Sudah lunas'
+              : `Belum lunas — kurang ${formatCurrency(monthCoverage.shortfall)}`}
+            <span className="font-normal text-slate-500">
+              {' '}
+              • terbayar {formatCurrency(monthCoverage.covered)}
+            </span>
+          </p>
+          {amount > 0 && newlyCovered.length > 0 && (
+            <p className="mt-1 text-xs text-slate-500">
+              Nominal ini menutup bulan:{' '}
+              <strong className="text-slate-700">{newlyCovered.join(', ')}</strong>.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Ekskul opsional — pembayaran ekskul ikut dicatat bersama SPP */}
+      {showEkskul && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Award size={15} className="text-primary-600" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Pembayaran Ekskul (opsional)
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Pilih Ekskul" htmlFor="ekskul_nama" hint="Kosongkan bila tidak ada">
+              <Select
+                id="ekskul_nama"
+                value={ekskulNama}
+                onChange={(e) => handleEkskulChange(e.target.value)}
+                className="input"
+              >
+                <option value="">Tidak ada pembayaran ekskul</option>
+                {ekskulOptions.map((item) => (
+                  <option key={item.nama} value={item.nama}>
+                    {item.nama} — {formatCurrency(item.biaya)}/bulan
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+
+            {selectedEkskul && (
+              <FormField
+                label="Nominal Bayar Ekskul"
+                htmlFor="ekskul_nominal"
+                hint={formatCurrency(ekskulAmount)}
+              >
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                    Rp
+                  </span>
+                  <input
+                    id="ekskul_nominal"
+                    type="text"
+                    inputMode="numeric"
+                    value={formatCurrencyInput(ekskulNominal)}
+                    onChange={(e) => setEkskulNominal(String(parseCurrencyInput(e.target.value)))}
+                    placeholder={formatCurrency(selectedEkskul.biaya, { withSymbol: false })}
+                    className="input pl-10 font-semibold"
+                  />
+                </div>
+              </FormField>
+            )}
+          </div>
+          {selectedEkskul && (
+            <p className="mt-3 rounded-lg border border-primary-100 bg-primary-50/60 px-3.5 py-2.5 text-xs text-primary-800">
+              Biaya bulanan ekskul {selectedEkskul.nama} sebesar{' '}
+              <strong>{formatCurrency(selectedEkskul.biaya)}</strong>. Bila siswa belum terdaftar,
+              otomatis didaftarkan saat menyimpan.
+            </p>
+          )}
+          {bulan && ekskulThisMonth.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-800">
+              <p className="font-semibold">Bulan {bulan} sudah ada pembayaran ekskul:</p>
+              <ul className="mt-1 space-y-0.5">
+                {ekskulThisMonth.map((item, index) => (
+                  <li key={`${item.nama}-${index}`}>
+                    • {item.nama} sebesar {formatCurrency(item.nominal)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {ekskulDuplicate.length > 0 && (
+            <p className="mt-2 text-xs font-medium text-amber-700">
+              Ekskul {ekskulNama} bulan {bulan} sudah pernah dibayar — konfirmasi akan diminta saat
+              menyimpan.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Peringatan */}
       <AnimatePresence>

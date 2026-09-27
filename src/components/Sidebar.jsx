@@ -1,7 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Award,
   BookOpen,
   CreditCard,
   LayoutDashboard,
@@ -21,7 +20,6 @@ const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/buku-induk', label: 'Buku Induk', icon: BookOpen },
   { to: '/pembayaran', label: 'Pembayaran', icon: CreditCard },
-  { to: '/ekskul', label: 'Ekskul', icon: Award },
 ];
 
 function NavItem({ item, collapsed, onNavigate }) {
@@ -34,10 +32,10 @@ function NavItem({ item, collapsed, onNavigate }) {
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+          'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
           collapsed && 'justify-center px-0',
           isActive
-            ? 'bg-white/10 text-white'
+            ? 'bg-white/[0.06] text-white'
             : 'text-slate-300/90 hover:bg-white/5 hover:text-white',
         )
       }
@@ -45,7 +43,7 @@ function NavItem({ item, collapsed, onNavigate }) {
       {({ isActive }) => (
         <>
           {isActive && (
-            <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary-400" />
+            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 bg-primary-400" />
           )}
           <Icon
             size={19}
@@ -141,7 +139,7 @@ function SidebarContent({
       {/* User + logout */}
       <div className="border-t border-white/10 p-3">
         {!collapsed && user && (
-          <div className="mb-2 flex items-center gap-2.5 rounded-xl bg-white/5 px-3 py-2.5 ring-1 ring-white/5">
+          <div className="mb-2 flex items-center gap-2.5 rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/5">
             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-500/20 text-xs font-bold text-primary-200">
               {initials(user.name)}
             </div>
@@ -155,7 +153,7 @@ function SidebarContent({
           type="button"
           onClick={onLogout}
           className={cn(
-            'group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-red-500/15 hover:text-red-300',
+            'group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-red-500/15 hover:text-red-300',
             collapsed && 'justify-center px-0',
           )}
         >
@@ -196,7 +194,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
       <motion.aside
         animate={{ width: collapsed ? 76 : 264 }}
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-        className="sticky top-0 hidden h-screen shrink-0 border-r border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 lg:block"
+        className="sticky top-0 hidden h-screen shrink-0 border-r border-slate-800 bg-slate-900 lg:block"
       >
         <SidebarContent
           collapsed={collapsed}
@@ -219,14 +217,14 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
               onClick={onCloseMobile}
-              className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-40 bg-slate-950/70 lg:hidden"
             />
             <motion.aside
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-              className="fixed inset-y-0 left-0 z-50 w-[272px] border-r border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 w-[272px] border-r border-slate-800 bg-slate-900 lg:hidden"
             >
               <button
                 type="button"

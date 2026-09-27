@@ -67,7 +67,7 @@ export default function DataTable({
       {/* Desktop table */}
       <div className={cn('overflow-x-auto', mobileRender && 'hidden md:block')}>
         <table className="w-full min-w-[720px] border-collapse">
-          <thead className="border-b border-slate-200 bg-slate-50/70">
+          <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               {columns.map((column) => {
                 const isSortable = Boolean(column.sortable && onSort);
@@ -121,7 +121,7 @@ export default function DataTable({
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={cn(
                     'border-b border-slate-100 transition-colors last:border-0',
-                    onRowClick ? 'cursor-pointer hover:bg-primary-50/40' : 'hover:bg-slate-50/70',
+                    onRowClick ? 'cursor-pointer hover:bg-slate-50' : 'hover:bg-slate-50/70',
                   )}
                 >
                   {columns.map((column) => (

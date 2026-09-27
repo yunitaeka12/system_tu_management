@@ -146,6 +146,24 @@ export function listEkskulRows({
   };
 }
 
+/**
+ * Indeks ekskul per siswa (student_id → daftar pendaftaran aktif + ringkasannya).
+ * Dipakai modul Pembayaran agar tidak menghitung ulang untuk tiap baris tabel.
+ */
+export function getEkskulIndex() {
+  const map = new Map();
+  (getDB().student_ekskul || []).forEach((row) => {
+    if (row.status === 'nonaktif') return;
+    if (!map.has(row.student_id)) map.set(row.student_id, []);
+    map.get(row.student_id).push(summarizeEnrollment(row));
+  });
+  // Urutkan pendaftaran terlama → terbaru (riwayat per tanggal).
+  map.forEach((list) =>
+    list.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))),
+  );
+  return map;
+}
+
 /** Detail ekskul satu siswa. */
 export function getStudentEkskul(studentId) {
   const db = getDB();
@@ -223,6 +241,43 @@ export function addEnrollment(studentId, ekskulNama) {
     draft.student_ekskul = [...(draft.student_ekskul || []), enrollment];
   });
   return { ok: true, enrollment };
+}
+
+/**
+ * Pastikan siswa terdaftar pada sebuah ekskul. Dipakai saat pembayaran ekskul
+ * dicatat dari modul Pembayaran: bila belum ada pendaftaran aktif untuk ekskul
+ * tsb, pendaftaran baru dibuat otomatis (tercatat tanggal pendaftarannya).
+ * Ekskul lain yang sudah diikuti tetap aktif — riwayat tidak ditimpa.
+ */
+export function ensureEnrollment(studentId, ekskulNama) {
+  const db = getDB();
+  const student = (db.students || []).find((s) => s.id === studentId);
+  if (!student) return { ok: false, error: 'Siswa tidak ditemukan.' };
+
+  const nama = String(ekskulNama || '').trim();
+  if (!nama) return { ok: false, error: 'Ekskul wajib dipilih.' };
+
+  const existing = enrollmentsOf(studentId).find(
+    (row) => normalizeText(row.ekskul_nama) === normalizeText(nama),
+  );
+  if (existing) return { ok: true, enrollment: existing, created: false };
+
+  const now = nowISO();
+  const enrollment = {
+    id: uid('eks'),
+    student_id: studentId,
+    ekskul_nama: nama,
+    biaya_bulanan: getEkskulFee(nama),
+    tahun_ajaran: getAcademicYearLabelFromNoInduk(student.no_induk),
+    status: 'aktif',
+    created_at: now,
+    updated_at: now,
+  };
+
+  commit((draft) => {
+    draft.student_ekskul = [...(draft.student_ekskul || []), enrollment];
+  });
+  return { ok: true, enrollment, created: true };
 }
 
 export function updateEnrollment(id, payload) {

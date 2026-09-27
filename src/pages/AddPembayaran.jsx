@@ -5,8 +5,10 @@ import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
 import PaymentForm from '../components/payment/PaymentForm';
 import { useStudentPayment } from '../hooks/usePayments';
+import { useStudentEkskul } from '../hooks/useEkskul';
 import { useAuth } from '../context/AuthContext';
 import { addPayment, previewPayment } from '../services/paymentService';
+import { addEkskulPayment, ensureEnrollment, getEkskulOptions } from '../services/ekskulService';
 import { confirmDialog, toast } from '../lib/toast';
 import { formatCurrency } from '../utils/currency';
 import { initials } from '../utils/helpers';
@@ -16,6 +18,7 @@ export default function AddPembayaran() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const summary = useStudentPayment(studentId);
+  const ekskulDetail = useStudentEkskul(studentId);
   const [submitting, setSubmitting] = useState(false);
 
   if (!summary) {
@@ -37,6 +40,7 @@ export default function AddPembayaran() {
   }
 
   const { student } = summary;
+  const ekskulOptions = getEkskulOptions();
 
   const handleSubmit = async (values) => {
     const previewData = previewPayment({
@@ -77,6 +81,32 @@ export default function AddPembayaran() {
       if (!proceed) return;
     }
 
+    // Peringatan bila bulan tsb sudah punya pembayaran ekskul.
+    if (values.ekskulNama && Number(values.ekskulNominal) > 0) {
+      const existing = (ekskulDetail?.enrollments ?? []).flatMap((enrollment) =>
+        (enrollment.payments || [])
+          .filter((payment) => payment.bulan === values.bulan)
+          .map((payment) => ({
+            nama: enrollment.ekskul_nama,
+            nominal: Number(payment.nominal_bayar) || 0,
+          })),
+      );
+      if (existing.length > 0) {
+        const proceed = await confirmDialog({
+          title: `Bulan ${values.bulan} sudah ada pembayaran ekskul`,
+          text: `Tercatat: ${existing
+            .map((item) => `${item.nama} ${formatCurrency(item.nominal)}`)
+            .join(', ')}. Tetap tambahkan pembayaran ekskul ${values.ekskulNama}?`,
+          confirmText: 'Tetap simpan',
+          cancelText: 'Batalkan',
+        });
+        if (!proceed) {
+          toast.info('Pembayaran dibatalkan.', 'Tidak ada perubahan');
+          return;
+        }
+      }
+    }
+
     setSubmitting(true);
     const result = addPayment({
       studentId,
@@ -87,13 +117,36 @@ export default function AddPembayaran() {
       keterangan: values.keterangan,
       createdBy: session?.name || 'Tata Usaha',
     });
-    setSubmitting(false);
 
     if (!result.ok) {
+      setSubmitting(false);
       toast.error(result.error || 'Gagal menyimpan pembayaran.');
       return;
     }
 
+    // Pembayaran ekskul ikut dicatat bila ekskul dipilih (pendaftaran otomatis).
+    if (values.ekskulNama && Number(values.ekskulNominal) > 0) {
+      const ensured = ensureEnrollment(studentId, values.ekskulNama);
+      if (!ensured.ok) {
+        toast.error(ensured.error || 'Gagal mendaftarkan ekskul.');
+      } else {
+        const ekskulResult = addEkskulPayment({
+          enrollmentId: ensured.enrollment.id,
+          bulan: values.bulan,
+          nominal: values.ekskulNominal,
+          tanggalBayar: values.tanggalBayar,
+          keterangan: `Pembayaran ekskul ${values.ekskulNama}`,
+          createdBy: session?.name || 'Tata Usaha',
+        });
+        if (ekskulResult.ok) {
+          toast.success(`Pembayaran ekskul ${values.ekskulNama} berhasil disimpan.`);
+        } else {
+          toast.error(ekskulResult.error || 'Gagal menyimpan pembayaran ekskul.');
+        }
+      }
+    }
+
+    setSubmitting(false);
     toast.success('Pembayaran berhasil disimpan.');
     navigate(`/pembayaran/${studentId}`, { replace: true });
   };
@@ -116,6 +169,10 @@ export default function AddPembayaran() {
           <div className="card card-pad">
             <PaymentForm
               student={student}
+              payments={summary.payments}
+              enrollments={ekskulDetail?.enrollments ?? []}
+              showEkskul
+              ekskulOptions={ekskulOptions}
               preview={({ bulan, nominal }) => previewPayment({ studentId, bulan, nominal })}
               onSubmit={handleSubmit}
               onCancel={() => navigate(`/pembayaran/${studentId}`)}
@@ -164,6 +221,7 @@ export default function AddPembayaran() {
               <li>• Ubah nominal bila sekolah menerima pembayaran sebagian.</li>
               <li>• Sistem otomatis menghitung total dibayar, sisa, dan status.</li>
               <li>• Bila bulan yang sama sudah ada, akan muncul peringatan.</li>
+              <li>• Pilih ekskul (opsional) untuk sekaligus mencatat bayar ekskul.</li>
             </ul>
           </div>
         </div>

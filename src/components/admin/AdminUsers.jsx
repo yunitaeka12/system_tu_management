@@ -11,6 +11,7 @@ import {
   UserX,
 } from 'lucide-react';
 import Modal from '../Modal';
+import Select from '../Select';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import {
@@ -174,7 +175,8 @@ export default function AdminUsers() {
           />
         </div>
 
-        <select
+        <Select
+          dark
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
           className="dark-input lg:max-w-[200px]"
@@ -185,7 +187,7 @@ export default function AdminUsers() {
               {ROLE_LABELS[role]}
             </option>
           ))}
-        </select>
+        </Select>
 
         <div className="lg:ml-auto">
           <button type="button" onClick={openAdd} className="dark-btn-primary w-full lg:w-auto">
@@ -330,7 +332,8 @@ export default function AdminUsers() {
               <label htmlFor="admin-role" className="dark-label">
                 Role / Hak Akses
               </label>
-              <select
+              <Select
+                dark
                 id="admin-role"
                 value={form.role}
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
@@ -341,7 +344,7 @@ export default function AdminUsers() {
                     {ROLE_LABELS[role]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             {formModal.mode === 'add' && (
               <div>

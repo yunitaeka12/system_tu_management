@@ -3,12 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
+  Award,
   BadgeCheck,
   BookUser,
   CreditCard,
   Home,
   IdCard,
   Pencil,
+  Plus,
   Ruler,
   Trash2,
   Users,
@@ -18,14 +20,19 @@ import PageHeader from '../components/PageHeader';
 import DetailItem, { DetailGrid } from '../components/DetailItem';
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
 import EmptyState from '../components/EmptyState';
+import Modal from '../components/Modal';
+import FormField from '../components/FormField';
+import Select from '../components/Select';
 import { Skeleton } from '../components/Skeleton';
 import { useStudent } from '../hooks/useStudents';
 import { useStudentPayment } from '../hooks/usePayments';
+import { useStudentEkskul } from '../hooks/useEkskul';
 import { deleteStudent } from '../services/studentService';
+import { addEnrollment, getEkskulOptions, removeEnrollment } from '../services/ekskulService';
 import { useAuth } from '../context/AuthContext';
 import { confirmDialog, toast } from '../lib/toast';
 import { formatCurrency, formatPercent } from '../utils/currency';
-import { cn, initials } from '../utils/helpers';
+import { cn, formatDate, initials } from '../utils/helpers';
 
 const TABS = [
   { key: 'identitas', label: 'Identitas Siswa', icon: IdCard },
@@ -81,7 +88,7 @@ function PaymentSummaryCard({ summary }) {
 
       <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-primary-500 to-school-500 transition-all duration-500"
+          className="h-full rounded-full bg-primary-600 transition-all duration-500"
           style={{ width: `${Math.min(progress, 100)}%` }}
         />
       </div>
@@ -93,6 +100,178 @@ function PaymentSummaryCard({ summary }) {
         <CreditCard size={15} />
         Buka Detail Pembayaran
       </Link>
+    </div>
+  );
+}
+
+/**
+ * Kartu ekskul siswa: daftar ekskul yang diikuti + riwayat pembayarannya
+ * per tanggal. Ekskul baru juga terdaftar otomatis saat pembayaran ekskul
+ * dicatat di menu Pembayaran.
+ */
+function EkskulCard({ studentId, canManage }) {
+  const detail = useStudentEkskul(studentId);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selected, setSelected] = useState('');
+
+  const enrollments = detail?.enrollments ?? [];
+  const ekskulOptions = getEkskulOptions();
+
+  const openModal = () => {
+    const available = ekskulOptions.find(
+      (item) => !enrollments.some((row) => row.ekskul_nama === item.nama),
+    );
+    setSelected(available?.nama ?? '');
+    setModalOpen(true);
+  };
+
+  const handleAdd = () => {
+    const result = addEnrollment(studentId, selected);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`Berhasil didaftarkan ke ekskul ${selected}.`);
+    setModalOpen(false);
+  };
+
+  const handleRemove = async (enrollment) => {
+    const confirmed = await confirmDialog({
+      title: `Keluarkan dari ekskul ${enrollment.ekskul_nama}?`,
+      text: `Data ekskul ini beserta ${enrollment.transactionCount} transaksi pembayarannya akan dihapus.`,
+      confirmText: 'Ya, keluarkan',
+    });
+    if (!confirmed) return;
+    const result = removeEnrollment(enrollment.id);
+    if (result.ok) toast.success('Data ekskul berhasil dihapus.');
+    else toast.error(result.error || 'Gagal menghapus ekskul.');
+  };
+
+  return (
+    <div className="card card-pad">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <Award size={16} className="text-primary-600" />
+            Ekskul Siswa
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {enrollments.length} ekskul • {formatCurrency(detail?.totalPaid ?? 0)} dibayar
+          </p>
+        </div>
+        {canManage && (
+          <button type="button" onClick={openModal} className="btn-secondary btn-sm">
+            <Plus size={15} />
+            Tambah Ekskul
+          </button>
+        )}
+      </div>
+
+      {enrollments.length === 0 ? (
+        <p className="mt-4 rounded-xl border border-dashed border-slate-200 px-3.5 py-4 text-center text-xs text-slate-500">
+          Belum mengikuti ekskul. Ekskul juga otomatis terdaftar saat pembayarannya dicatat di menu
+          Pembayaran.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {enrollments.map((enrollment) => (
+            <div key={enrollment.id} className="rounded-xl border border-slate-200 p-3.5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800">
+                    {enrollment.ekskul_nama}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {formatCurrency(enrollment.monthlyFee)}/bulan
+                    {enrollment.created_at
+                      ? ` • Terdaftar ${formatDate(enrollment.created_at)}`
+                      : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="badge bg-school-50 text-school-700">
+                    {formatCurrency(enrollment.totalPaid)}
+                  </span>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(enrollment)}
+                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                      title="Hapus ekskul"
+                      aria-label={`Hapus ekskul ${enrollment.ekskul_nama}`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {(enrollment.payments || []).length > 0 && (
+                <div className="mt-2.5 space-y-1 border-t border-slate-100 pt-2.5">
+                  {[...enrollment.payments]
+                    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+                    .map((payment) => (
+                      <div
+                        key={payment.id}
+                        className="flex items-center justify-between gap-2 text-xs"
+                      >
+                        <span className="font-medium text-slate-600">{payment.bulan}</span>
+                        <span className="text-slate-400">{formatDate(payment.tanggal_bayar)}</span>
+                        <span className="font-semibold text-school-700">
+                          {formatCurrency(payment.nominal_bayar)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Tambah Ekskul"
+        description="Pilih ekskul yang diikuti siswa"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <FormField label="Ekskul" htmlFor="sd-ekskul" required>
+            <Select
+              id="sd-ekskul"
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+              className="input"
+            >
+              <option value="">Pilih Ekskul</option>
+              {ekskulOptions.map((item) => (
+                <option
+                  key={item.nama}
+                  value={item.nama}
+                  disabled={enrollments.some((row) => row.ekskul_nama === item.nama)}
+                >
+                  {item.nama} — {formatCurrency(item.biaya)}/bulan
+                </option>
+              ))}
+            </Select>
+          </FormField>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">
+              Batalkan
+            </button>
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={!selected}
+              className="btn-primary"
+            >
+              Tambahkan
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -174,7 +353,7 @@ export default function StudentDetail() {
         <div className="space-y-5">
           <div className="card card-pad">
             <div className="flex items-start gap-4">
-              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary-600 to-primary-700 text-lg font-bold text-white">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-primary-600 text-lg font-bold text-white">
                 {initials(student.nama_lengkap)}
               </div>
               <div className="min-w-0">
@@ -204,6 +383,8 @@ export default function StudentDetail() {
           </div>
 
           <PaymentSummaryCard summary={summary} />
+
+          <EkskulCard studentId={student.id} canManage={can('student.update')} />
         </div>
 
         {/* Right: tabs */}

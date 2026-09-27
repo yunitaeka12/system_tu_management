@@ -213,7 +213,7 @@ function CollectionRate({ metrics }) {
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(metrics.collectionRate, 100)}%` }}
           transition={{ duration: 0.7, ease: 'easeOut' }}
-          className="h-full rounded-full bg-gradient-to-r from-primary-500 to-school-500"
+          className="h-full rounded-full bg-primary-600"
         />
       </div>
 
@@ -486,10 +486,10 @@ export default function Dashboard() {
             <Link
               key={item.to}
               to={item.to}
-              className="card group flex items-center gap-4 p-5 transition-shadow hover:shadow-card-hover"
+              className="card group flex items-center gap-4 p-4 transition-colors hover:border-slate-300"
             >
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-50 text-primary-600">
-                <Icon size={20} />
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary-50 text-primary-600">
+                <Icon size={18} />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-slate-800">{item.title}</p>

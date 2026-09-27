@@ -9,9 +9,8 @@ dan panel administrator. Dibangun dengan React + Vite, data tersimpan di
 | Modul | Isi |
 | --- | --- |
 | **Dashboard** | Ringkasan tagihan, pembayaran, piutang, chart per bulan, insight per kelas |
-| **Buku Induk** | Master data 1.200+ siswa, pencarian, filter kelas/rombel/tahun ajaran, import & export Excel |
-| **Pembayaran** | Pencatatan SPP per bulan, peta warna bulanan (merah/kuning/hijau), riwayat + pagination |
-| **Ekskul** | Pendaftaran ekskul (13 pilihan + biaya), pembayaran per bulan, riwayat |
+| **Buku Induk** | Master data 1.200+ siswa, pencarian, filter kelas/rombel/tahun ajaran, import & export Excel, serta kelola ekskul siswa + riwayat pembayarannya per tanggal |
+| **Pembayaran** | Pencatatan SPP per bulan — sekaligus bisa memilih ekskul & mencatat bayar ekskul (opsional), peta warna bulanan gabungan SPP+ekskul (merah/kuning/hijau), riwayat gabungan + pagination |
 | **Pengaturan** | Ubah tarif SPP per angkatan dan biaya tiap ekskul (plus tambah/hapus angkatan & ekskul) |
 | **Admin Panel** | Kelola pengguna, hak akses per role & per pengguna, hapus massal per kelas/tahun ajaran (tema gelap) |
 | **Keamanan** | Login 3x salah → akun terkunci, popup ganti password, verifikasi password tiap 3 jam, auto logout 1 menit |

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, BookUser, Home, IdCard, Info, Loader2, Ruler, Save, UserSquare2, Users } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import FormField from '../components/FormField';
+import Select from '../components/Select';
 import EmptyState from '../components/EmptyState';
 import { useStudent } from '../hooks/useStudents';
 import { createStudent, updateStudent } from '../services/studentService';
@@ -266,7 +267,7 @@ export default function StudentForm({ mode = 'create' }) {
           <TextField form={form} setField={setField} name="nama_lengkap" label="Nama Lengkap" required placeholder="NAMA LENGKAP SISWA" />
           <TextField form={form} setField={setField} name="nama_panggilan" label="Nama Panggilan" />
           <FormField label="Kelas" htmlFor="kelas" required error={form.__errors?.kelas}>
-            <select
+            <Select
               id="kelas"
               value={form.kelas}
               onChange={(e) => setField('kelas', e.target.value)}
@@ -278,11 +279,11 @@ export default function StudentForm({ mode = 'create' }) {
                   Kelas {item}
                 </option>
               ))}
-            </select>
+            </Select>
           </FormField>
           <TextField form={form} setField={setField} name="rombel" label="Rombel" />
           <FormField label="Jenis Kelamin" htmlFor="jenis_kelamin">
-            <select
+            <Select
               id="jenis_kelamin"
               value={form.jenis_kelamin}
               onChange={(e) => setField('jenis_kelamin', e.target.value)}
@@ -291,7 +292,7 @@ export default function StudentForm({ mode = 'create' }) {
               <option value="">Pilih</option>
               <option value="Laki-laki">Laki-laki</option>
               <option value="Perempuan">Perempuan</option>
-            </select>
+            </Select>
           </FormField>
           <TextField form={form} setField={setField} name="agama" label="Agama" />
           <TextField form={form} setField={setField} name="kewarganegaraan" label="Kewarganegaraan" />
@@ -363,7 +364,7 @@ export default function StudentForm({ mode = 'create' }) {
         </Section>
       </div>
 
-      <div className="sticky bottom-0 mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50/90 py-4 backdrop-blur sm:flex-row sm:justify-end">
+      <div className="sticky bottom-0 mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 py-4 sm:flex-row sm:justify-end">
         <Link to="/buku-induk" className="btn-secondary">
           Batal
         </Link>

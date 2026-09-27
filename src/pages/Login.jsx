@@ -286,7 +286,7 @@ export default function Login() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="w-full max-w-sm rounded-2xl border border-white/60 bg-white/95 p-6 shadow-2xl backdrop-blur-sm sm:p-8"
+          className="w-full max-w-sm rounded-lg border border-white/60 bg-white p-6 shadow-xl sm:p-8"
         >
           <div className="lg:hidden">
             <Logo size="md" />

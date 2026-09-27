@@ -78,7 +78,7 @@ export default function Profile() {
         <div className="xl:col-span-1">
           <div className="card card-pad">
             <div className="flex flex-col items-center text-center">
-              <div className="grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-primary-600 to-primary-700 text-2xl font-bold text-white">
+              <div className="grid h-20 w-20 place-items-center rounded-lg bg-primary-600 text-2xl font-bold text-white">
                 {initials(session?.name)}
               </div>
               <h2 className="mt-4 text-base font-bold text-slate-900">{session?.name}</h2>

@@ -10,27 +10,29 @@ import { cn } from '../../utils/helpers';
 
 function StatTile({ icon: Icon, label, value, hint, tone = 'primary' }) {
   const tones = {
-    primary: 'from-primary-500/20 to-primary-500/0 text-primary-200',
-    green: 'from-school-500/20 to-school-500/0 text-school-200',
-    amber: 'from-amber-500/20 to-amber-500/0 text-amber-200',
-    violet: 'from-violet-500/20 to-violet-500/0 text-violet-200',
+    primary: 'text-primary-300',
+    green: 'text-school-300',
+    amber: 'text-amber-300',
+    violet: 'text-violet-300',
   };
   return (
-    <div className={cn('dark-card relative overflow-hidden p-5')}>
-      <div className={cn('absolute inset-0 bg-gradient-to-br', tones[tone])} />
-      <div className="relative">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              {label}
-            </p>
-            <p className="mt-2 truncate text-2xl font-bold tracking-tight text-white">{value}</p>
-            {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
-          </div>
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10">
-            <Icon size={19} />
-          </span>
+    <div className="dark-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            {label}
+          </p>
+          <p className="mt-1.5 truncate text-xl font-bold tracking-tight text-white">{value}</p>
+          {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
         </div>
+        <span
+          className={cn(
+            'grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white/5 ring-1 ring-white/10',
+            tones[tone],
+          )}
+        >
+          <Icon size={17} />
+        </span>
       </div>
     </div>
   );
@@ -100,7 +102,7 @@ export default function AdminOverview() {
                   </div>
                   <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-primary-500 to-school-500"
+                      className="h-full rounded-full bg-primary-600"
                       style={{ width: `${percent}%` }}
                     />
                   </div>

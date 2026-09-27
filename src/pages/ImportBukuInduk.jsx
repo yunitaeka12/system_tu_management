@@ -559,7 +559,7 @@ export default function ImportBukuInduk() {
                   <motion.div
                     animate={{ width: `${progressPercent}%` }}
                     transition={{ duration: 0.2 }}
-                    className="h-full rounded-full bg-gradient-to-r from-primary-500 to-school-500"
+                    className="h-full rounded-full bg-primary-600"
                   />
                 </div>
                 <p className="mt-2 text-xs text-slate-400">{progressPercent}% selesai</p>

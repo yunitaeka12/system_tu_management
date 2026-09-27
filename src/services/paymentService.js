@@ -16,6 +16,7 @@ import {
   getPaymentStatus,
   PAYMENT_STATUS,
 } from '../utils/paymentCalculator';
+import { getEkskulIndex } from './ekskulService';
 
 /* ------------------------------------------------------------------ */
 /* Tahun ajaran                                                        */
@@ -110,8 +111,21 @@ export function listPaymentRows({
   const safePage = Math.min(Math.max(page, 1), totalPages);
   const start = (safePage - 1) * pageSize;
 
+  // Info ekskul hanya dilampirkan untuk baris yang tampil (hemat perhitungan).
+  const ekskulIndex = getEkskulIndex();
+  const data = rows.slice(start, start + pageSize).map((row) => {
+    const ekskul = ekskulIndex.get(row.student_id) || [];
+    return {
+      ...row,
+      ekskul,
+      ekskul_names: ekskul.map((item) => item.ekskul_nama),
+      ekskul_fee: ekskul.reduce((sum, item) => sum + item.monthlyFee, 0),
+      ekskul_paid: ekskul.reduce((sum, item) => sum + item.totalPaid, 0),
+    };
+  });
+
   return {
-    data: rows.slice(start, start + pageSize),
+    data,
     total,
     page: safePage,
     pageSize,

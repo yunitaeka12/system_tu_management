@@ -13,10 +13,8 @@ export default function Logo({ className, size = 'md', iconOnly = false, onDark 
     <div className={cn('flex items-center gap-3', className)}>
       <div
         className={cn(
-          'grid shrink-0 place-items-center rounded-xl text-white shadow-sm',
-          onDark
-            ? 'bg-gradient-to-br from-primary-500 to-school-500'
-            : 'bg-gradient-to-br from-primary-600 to-primary-700',
+          'grid shrink-0 place-items-center rounded-lg text-white',
+          'bg-primary-600',
           s.box,
         )}
       >

@@ -46,7 +46,7 @@ export default function Modal({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             onClick={closeOnBackdrop ? onClose : undefined}
-            className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-900/50"
           />
 
           <motion.div

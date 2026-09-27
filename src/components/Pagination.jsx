@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Select from './Select';
 import { cn } from '../utils/helpers';
 import { formatNumber } from '../utils/currency';
 
@@ -37,18 +38,18 @@ export default function Pagination({
           <strong className="font-semibold text-slate-700">{formatNumber(total)}</strong> data
         </span>
         {onPageSizeChange && (
-          <select
+          <Select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
             className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-            aria-label="Jumlah baris per halaman"
+            ariaLabel="Jumlah baris per halaman"
           >
             {pageSizes.map((size) => (
               <option key={size} value={size}>
                 {size} / halaman
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 

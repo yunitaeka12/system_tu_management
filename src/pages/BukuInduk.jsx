@@ -4,6 +4,7 @@ import { BookOpen, Eye, FileSpreadsheet, Filter, Pencil, Plus, Trash2, UserPlus,
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import SearchInput from '../components/SearchInput';
+import Select from '../components/Select';
 import Pagination from '../components/Pagination';
 import EmptyState from '../components/EmptyState';
 import { useFilterOptions, useStudents } from '../hooks/useStudents';
@@ -244,7 +245,7 @@ export default function BukuInduk() {
                 <label htmlFor="filter-tahun" className="label">
                   Tahun Ajaran
                 </label>
-                <select
+                <Select
                   id="filter-tahun"
                   value={tahunAjaran}
                   onChange={(e) => resetPage(setTahunAjaran)(e.target.value)}
@@ -256,13 +257,13 @@ export default function BukuInduk() {
                       {item.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label htmlFor="filter-kelas" className="label">
                   Kelas
                 </label>
-                <select
+                <Select
                   id="filter-kelas"
                   value={kelas}
                   onChange={(e) => resetPage(setKelas)(e.target.value)}
@@ -274,13 +275,13 @@ export default function BukuInduk() {
                       Kelas {item}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label htmlFor="filter-rombel" className="label">
                   Rombel
                 </label>
-                <select
+                <Select
                   id="filter-rombel"
                   value={rombel}
                   onChange={(e) => resetPage(setRombel)(e.target.value)}
@@ -292,13 +293,13 @@ export default function BukuInduk() {
                       Rombel {item}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label htmlFor="filter-jk" className="label">
                   Jenis Kelamin
                 </label>
-                <select
+                <Select
                   id="filter-jk"
                   value={jenisKelamin}
                   onChange={(e) => resetPage(setJenisKelamin)(e.target.value)}
@@ -307,7 +308,7 @@ export default function BukuInduk() {
                   <option value="">Semua</option>
                   <option value="Laki-laki">Laki-laki</option>
                   <option value="Perempuan">Perempuan</option>
-                </select>
+                </Select>
               </div>
             </div>
           )}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarDays, Info, Loader2, Save, Wallet } from 'lucide-react';
 import FormField from '../FormField';
+import Select from '../Select';
 import { MONTHS } from '../../utils/paymentCalculator';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '../../utils/currency';
 import { cn } from '../../utils/helpers';
@@ -110,7 +111,7 @@ export default function EkskulPaymentForm({
               size={16}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
             />
-            <select
+            <Select
               id="eks-bulan"
               value={bulan}
               onChange={(e) => setBulan(e.target.value)}
@@ -122,7 +123,7 @@ export default function EkskulPaymentForm({
                   {month}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </FormField>
 

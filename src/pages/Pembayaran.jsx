@@ -4,6 +4,7 @@ import { ArrowRight, CreditCard, Eye, Filter, Search, Trash2, Wallet, X } from '
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import SearchInput from '../components/SearchInput';
+import Select from '../components/Select';
 import Pagination from '../components/Pagination';
 import EmptyState from '../components/EmptyState';
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
@@ -16,6 +17,21 @@ import { formatCurrency, formatNumber } from '../utils/currency';
 import { PAYMENT_STATUS, PAYMENT_STATUS_LABEL } from '../utils/paymentCalculator';
 import { cn } from '../utils/helpers';
 
+function EkskulPills({ names }) {
+  if (!names?.length) {
+    return <span className="text-xs text-slate-400">Belum ikut ekskul</span>;
+  }
+  return (
+    <div className="flex flex-wrap justify-center gap-1">
+      {names.map((nama) => (
+        <span key={nama} className="badge bg-primary-50 text-primary-700 ring-1 ring-primary-100">
+          {nama}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function MiniStat({ label, value, tone = 'slate' }) {
   const tones = {
     slate: 'text-slate-800',
@@ -24,8 +40,8 @@ function MiniStat({ label, value, tone = 'slate' }) {
     red: 'text-red-600',
   };
   return (
-    <div className="card px-4 py-3.5">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</p>
+    <div className="bg-white px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
       <p className={cn('mt-1 truncate text-base font-bold', tones[tone])}>{value}</p>
     </div>
   );
@@ -124,6 +140,12 @@ export default function Pembayaran() {
         ),
       },
       {
+        key: 'ekskul_names',
+        header: 'Ekskul Saat Ini',
+        align: 'center',
+        render: (row) => <EkskulPills names={row.ekskul_names} />,
+      },
+      {
         key: 'annual_fee',
         header: 'Total Tagihan',
         sortable: true,
@@ -205,51 +227,60 @@ export default function Pembayaran() {
         badge={<span className="stat-chip">{metrics.activeYear?.nama_tahun_ajaran ?? '-'}</span>}
       />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MiniStat label="Total Tagihan" value={formatCurrency(metrics.totalBilling)} />
-        <MiniStat label="Sudah Dibayar" value={formatCurrency(metrics.totalPaid)} tone="green" />
-        <MiniStat label="Belum Dibayar" value={formatCurrency(metrics.totalPiutang)} tone="red" />
-        <MiniStat
-          label="Collection Rate"
-          value={`${metrics.collectionRate.toFixed(1).replace('.', ',')}%`}
-          tone="amber"
-        />
+      <div className="card mb-4 overflow-hidden">
+        <div className="grid grid-cols-2 gap-px bg-slate-200 lg:grid-cols-4">
+          <MiniStat label="Total Tagihan" value={formatCurrency(metrics.totalBilling)} />
+          <MiniStat label="Sudah Dibayar" value={formatCurrency(metrics.totalPaid)} tone="green" />
+          <MiniStat label="Belum Dibayar" value={formatCurrency(metrics.totalPiutang)} tone="red" />
+          <MiniStat
+            label="Collection Rate"
+            value={`${metrics.collectionRate.toFixed(1).replace('.', ',')}%`}
+            tone="amber"
+          />
+        </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-3 gap-3">
-        {[
-          { key: PAYMENT_STATUS.LUNAS, value: metrics.lunas, tone: 'green' },
-          { key: PAYMENT_STATUS.SEBAGIAN, value: metrics.sebagian, tone: 'amber' },
-          { key: PAYMENT_STATUS.BELUM, value: metrics.belum, tone: 'slate' },
-        ].map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => {
-              setStatus(status === item.key ? '' : item.key);
-              setPage(1);
-            }}
-            className={cn(
-              'card flex items-center justify-between gap-3 px-4 py-3.5 text-left transition hover:shadow-card-hover',
-              status === item.key && 'ring-2 ring-primary-500',
-            )}
-          >
-            <div className="min-w-0">
-              <p className="truncate text-xs font-medium text-slate-500">
-                {PAYMENT_STATUS_LABEL[item.key]}
-              </p>
-              <p className="mt-0.5 text-lg font-bold text-slate-800">{formatNumber(item.value)}</p>
-            </div>
-            <Wallet
-              size={18}
+      <div className="card mb-4 overflow-hidden">
+        <div className="grid grid-cols-3 gap-px bg-slate-200">
+          {[
+            { key: PAYMENT_STATUS.LUNAS, value: metrics.lunas, tone: 'green' },
+            { key: PAYMENT_STATUS.SEBAGIAN, value: metrics.sebagian, tone: 'amber' },
+            { key: PAYMENT_STATUS.BELUM, value: metrics.belum, tone: 'slate' },
+          ].map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                setStatus(status === item.key ? '' : item.key);
+                setPage(1);
+              }}
               className={cn(
-                item.tone === 'green' && 'text-school-500',
-                item.tone === 'amber' && 'text-amber-500',
-                item.tone === 'slate' && 'text-slate-400',
+                'flex items-center justify-between gap-3 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50',
+                status === item.key && 'bg-primary-50/70',
               )}
-            />
-          </button>
-        ))}
+            >
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    'truncate text-xs font-medium',
+                    status === item.key ? 'text-primary-700' : 'text-slate-500',
+                  )}
+                >
+                  {PAYMENT_STATUS_LABEL[item.key]}
+                </p>
+                <p className="mt-0.5 text-base font-bold text-slate-800">{formatNumber(item.value)}</p>
+              </div>
+              <Wallet
+                size={17}
+                className={cn(
+                  item.tone === 'green' && 'text-school-500',
+                  item.tone === 'amber' && 'text-amber-500',
+                  item.tone === 'slate' && 'text-slate-400',
+                )}
+              />
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -291,7 +322,7 @@ export default function Pembayaran() {
                 <label htmlFor="pay-filter-tahun" className="label">
                   Tahun Ajaran
                 </label>
-                <select
+                <Select
                   id="pay-filter-tahun"
                   value={tahunAjaran}
                   onChange={(e) => resetPage(setTahunAjaran)(e.target.value)}
@@ -303,13 +334,13 @@ export default function Pembayaran() {
                       {item.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label htmlFor="pay-filter-kelas" className="label">
                   Kelas
                 </label>
-                <select
+                <Select
                   id="pay-filter-kelas"
                   value={kelas}
                   onChange={(e) => resetPage(setKelas)(e.target.value)}
@@ -321,13 +352,13 @@ export default function Pembayaran() {
                       Kelas {item}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label htmlFor="pay-filter-status" className="label">
                   Status Pembayaran
                 </label>
-                <select
+                <Select
                   id="pay-filter-status"
                   value={status}
                   onChange={(e) => resetPage(setStatus)(e.target.value)}
@@ -337,7 +368,7 @@ export default function Pembayaran() {
                   <option value={PAYMENT_STATUS.LUNAS}>Lunas</option>
                   <option value={PAYMENT_STATUS.SEBAGIAN}>Sebagian Dibayar</option>
                   <option value={PAYMENT_STATUS.BELUM}>Belum Bayar</option>
-                </select>
+                </Select>
               </div>
             </div>
           )}
@@ -383,6 +414,18 @@ export default function Pembayaran() {
                 <p className="mt-0.5 text-xs text-slate-500">
                   {row.no_induk} • Kelas {row.kelas}
                 </p>
+                {row.ekskul_names?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {row.ekskul_names.map((nama) => (
+                      <span
+                        key={nama}
+                        className="badge bg-primary-50 text-primary-700 ring-1 ring-primary-100"
+                      >
+                        {nama}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="mt-2 flex items-center gap-2">
                   <PaymentStatusBadge status={row.status} compact />
                   <span className="text-xs text-slate-500">

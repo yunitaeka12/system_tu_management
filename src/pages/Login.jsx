@@ -205,9 +205,12 @@ export default function Login() {
   const mfaHeading = qrCode ? 'Daftarkan Authenticator' : 'Verifikasi Dua Langkah';
 
   return (
-    <div className="grid min-h-screen bg-slate-50 lg:grid-cols-2">
+    <div
+      className="relative grid min-h-screen bg-slate-900 bg-cover bg-center bg-no-repeat lg:grid-cols-2"
+      style={{ backgroundImage: "url('/bglogin.png')" }}
+    >
       {/* Brand panel */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary-700 via-primary-800 to-primary-950 p-10 lg:flex lg:flex-col lg:justify-between">
+      <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary-900/85 via-primary-950/80 to-slate-950/90 p-10 backdrop-blur-[2px] lg:flex lg:flex-col lg:justify-between">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07]"
           style={{
@@ -283,7 +286,7 @@ export default function Login() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="w-full max-w-sm"
+          className="w-full max-w-sm rounded-2xl border border-white/60 bg-white/95 p-6 shadow-2xl backdrop-blur-sm sm:p-8"
         >
           <div className="lg:hidden">
             <Logo size="md" />
